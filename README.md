@@ -2,6 +2,9 @@
 
 **Caledon is a Rust implementation of the Wayland protocol.**
 
+[![CI](https://github.com/sbosnick/caledon/workflows/CI/badge.svg)](https://github.com/sbosnick/caledon/actions?query=workflow%3ACI)
+---
+
 Caledon implements the [Wayland] display server protocol directly in Rust without any
 dependancies on C code. It provides an implementation of the [Wayland] wire protocol
 and abstractions to expose the various [Wayland] protocol messages as types.
