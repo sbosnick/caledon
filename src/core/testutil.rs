@@ -8,7 +8,10 @@
 
 use std::convert::TryFrom;
 
-use super::{Message, MessageList, Interface, InterfaceList, Protocol, ProtocolList, ProtocolFamily, Fd, ObjectId, ConversionError};
+use super::{
+    ConversionError, Fd, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol,
+    ProtocolFamily, ProtocolList,
+};
 
 // These types are a manual implementation of the "build_time_wayland_tests" protocol from the
 // Wayland repository (in the "protocol/tests.xml" file).
@@ -18,7 +21,6 @@ impl Message for DestroyRequest {
     const OPCODE: u16 = 0;
     type Signature = ();
     type MessageList = Requests;
-
 }
 
 pub struct ConjoinRequest {}
@@ -43,7 +45,7 @@ impl From<DestroyRequest> for Requests {
 impl TryFrom<Requests> for DestroyRequest {
     type Error = ConversionError;
 
-    fn try_from(r: Requests) -> Result<Self,Self::Error> {
+    fn try_from(r: Requests) -> Result<Self, Self::Error> {
         match r {
             Requests::Destroy(d) => Ok(d),
             _ => Err(ConversionError::message()),
@@ -73,7 +75,7 @@ impl Message for PreFdEvent {
     type MessageList = Events;
 }
 
-pub struct FdEvent{}
+pub struct FdEvent {}
 impl Message for FdEvent {
     const OPCODE: u16 = 1;
     type Signature = (Fd,);
@@ -151,7 +153,7 @@ impl Protocol for BuildTimeWaylandTests {
 }
 
 pub enum Protocols {
-    BuildTimeWaylandTests(BuildTimeWaylandTests)
+    BuildTimeWaylandTests(BuildTimeWaylandTests),
 }
 impl ProtocolList for Protocols {
     type ProtocolFamily = Family;

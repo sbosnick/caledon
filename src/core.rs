@@ -72,7 +72,6 @@ pub trait Signature {}
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait Message: Sized {
-
     /// The opcode for this message. It uniquely identifies the message type within
     /// the message's `MessageList`.
     const OPCODE: u16;
@@ -83,7 +82,7 @@ pub trait Message: Sized {
 
     /// The message list to which this message belongs. It will be either the
     /// list of requests or the list of events for some `Interface`.
-    type MessageList: MessageList+From<Self>+TryInto<Self>;
+    type MessageList: MessageList + From<Self> + TryInto<Self>;
 }
 
 /// A list of [Wayland] messages associated with a particular interface.
@@ -97,7 +96,6 @@ pub trait Message: Sized {
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait MessageList {
-
     /// The interface with which this `MessageList` is associated.
     type Interface: Interface;
 }
@@ -113,7 +111,6 @@ pub trait MessageList {
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait Interface: Sized {
-
     /// The list of request messages for this `Interface`.
     type Requests: MessageList;
 
@@ -122,9 +119,8 @@ pub trait Interface: Sized {
 
     /// The interface list to which this interface belongs. This indirectly
     /// identifies the protocol to which this interface belong.
-    type InterfaceList: InterfaceList+From<Self>+TryInto<Self>;
+    type InterfaceList: InterfaceList + From<Self> + TryInto<Self>;
 }
-
 
 /// A list of [Wayland] interfaces associated with a particular protocol.
 ///
@@ -134,7 +130,6 @@ pub trait Interface: Sized {
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait InterfaceList {
-
     /// The protocol with which this `InterfaceList` is associated.
     type Protocol: Protocol;
 }
@@ -146,13 +141,12 @@ pub trait InterfaceList {
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait Protocol: Sized {
-
     /// The interfaces that make up this `Protocol`.
     type Interfaces: InterfaceList;
 
     /// The protocol list to which this protocol belongs. This indirectly identifies
     /// the protocol family to which this protocol belongs.
-    type ProtocolList: ProtocolList+From<Self>+TryInto<Self>;
+    type ProtocolList: ProtocolList + From<Self> + TryInto<Self>;
 }
 
 /// A list of [Wayland] protocols associated with a particular protocol family.
@@ -167,7 +161,6 @@ pub trait Protocol: Sized {
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait ProtocolList {
-
     /// The protocol family with which this `ProtocolList` is associated.
     type ProtocolFamily: ProtocolFamily;
 }
@@ -183,7 +176,6 @@ pub trait ProtocolList {
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait ProtocolFamily {
-
     /// The protocols associated with this `ProtocolFamily`.
     type Protocols: ProtocolList;
 }
@@ -212,7 +204,7 @@ macro_rules! tuple_impl {
     }
 }
 
-tuple_impl!{
+tuple_impl! {
     Tuple1 {
         (0) -> A
     }
@@ -335,20 +327,25 @@ pub struct ConversionError {
 }
 
 impl ConversionError {
-
     /// Create a `ConversionError` for a message conversion.
     pub fn message() -> ConversionError {
-        ConversionError { typ: ConversionErrorType::Message }
+        ConversionError {
+            typ: ConversionErrorType::Message,
+        }
     }
 
     /// Create a `ConversionError` for an interface conversion.
     pub fn interface() -> ConversionError {
-        ConversionError { typ: ConversionErrorType::Interface }
+        ConversionError {
+            typ: ConversionErrorType::Interface,
+        }
     }
 
     /// Create a `ConversionError for a protocol conversion.
     pub fn protocol() -> ConversionError {
-        ConversionError { typ: ConversionErrorType::Protocol }
+        ConversionError {
+            typ: ConversionErrorType::Protocol,
+        }
     }
 }
 
