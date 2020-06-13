@@ -11,6 +11,8 @@
 //! [Wayland]: https://wayland.freedesktop.org/
 
 use std::convert::TryInto;
+use std::ffi::CString;
+use std::os::unix::io::RawFd;
 
 /// An argument type for a [Wayland] message.
 ///
@@ -25,16 +27,30 @@ use std::convert::TryInto;
 /// | object        | `ObjectId`  |
 /// | new_id        | `ObjectId`  |
 /// | array         | `Box<[u8]>` |
-/// | fd            | `RawFd`     |
+/// | fd            | `Fd`        |
 ///
-/// The `ObjectId` and `Decimal` types are part of this module. The remaining Rust
-/// type are part of the standard library.
+/// The `Fd`, `ObjectId` and `Decimal` types are part of this module. The remaining
+/// Rust type are part of the standard library.
 ///
 /// This trait is sealed so there cannot be any implementations outside of this
 /// crate.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait Argument: private::Sealed {}
+
+/// An object or new_id `Argument` for the [Wayland] wire protocol.
+///
+/// [Wayland]: https://wayland.freedesktop.org/
+pub struct ObjectId(u32);
+
+/// A fixed decimal `Argument` for the [Wayland] wire protocol.
+pub struct Decimal(u32);
+
+/// An fd `Argument` for the [Wayland] wire protocol.
+///
+/// This is a new-type warpper around a `RawFd`. We can't use `RawFd` directly
+/// because that is a type alais for `i32` which is already the int `Argument` type.
+pub struct Fd(RawFd);
 
 /// The signature for a [Wayland] message.
 ///
@@ -170,6 +186,25 @@ pub trait ProtocolFamily {
     type Protocols: ProtocolList;
 }
 
+// === impl Argument ===
+impl Argument for i32 {}
+impl Argument for u32 {}
+impl Argument for Decimal {}
+impl Argument for CString {}
+impl Argument for ObjectId {}
+impl Argument for Box<[u8]> {}
+impl Argument for Fd {}
+
 mod private {
+    use std::ffi::CString;
+
     pub trait Sealed {}
+
+    impl Sealed for i32 {}
+    impl Sealed for u32 {}
+    impl Sealed for super::Decimal {}
+    impl Sealed for CString {}
+    impl Sealed for super::ObjectId {}
+    impl Sealed for Box<[u8]> {}
+    impl Sealed for super::Fd {}
 }
