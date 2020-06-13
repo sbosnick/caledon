@@ -11,7 +11,9 @@
 //! [Wayland]: https://wayland.freedesktop.org/
 
 use std::convert::TryInto;
+use std::error::Error;
 use std::ffi::CString;
+use std::fmt;
 use std::os::unix::io::RawFd;
 
 /// An argument type for a [Wayland] message.
@@ -315,6 +317,57 @@ tuple_impl!{
     }
 }
 
+// === utility types ===
+#[derive(Debug)]
+enum ConversionErrorType {
+    Message,
+    Interface,
+    Protocol,
+}
+
+/// An attept to convert from a list type to an item in that list was unsucessful.
+///
+/// The three list type for which this error might apply are a `MessageList`, an `InterfaceList`,
+/// and a `ProtocolList`.
+#[derive(Debug)]
+pub struct ConversionError {
+    typ: ConversionErrorType,
+}
+
+impl ConversionError {
+
+    /// Create a `ConversionError` for a message conversion.
+    pub fn message() -> ConversionError {
+        ConversionError { typ: ConversionErrorType::Message }
+    }
+
+    /// Create a `ConversionError` for an interface conversion.
+    pub fn interface() -> ConversionError {
+        ConversionError { typ: ConversionErrorType::Interface }
+    }
+
+    /// Create a `ConversionError for a protocol conversion.
+    pub fn protocol() -> ConversionError {
+        ConversionError { typ: ConversionErrorType::Protocol }
+    }
+}
+
+impl Error for ConversionError {}
+
+impl fmt::Display for ConversionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ConversionErrorType::*;
+
+        let typ = match self.typ {
+            Message => "message",
+            Interface => "interface",
+            Protocol => "protocol",
+        };
+
+        write!(f, "Unable to convert a {} list to a {}.", typ, typ)
+    }
+}
+
 mod private {
     use std::ffi::CString;
 
@@ -328,3 +381,6 @@ mod private {
     impl Sealed for Box<[u8]> {}
     impl Sealed for super::Fd {}
 }
+
+#[cfg(test)]
+mod testutil;
