@@ -11,10 +11,11 @@
 //! [Wayland]: https://wayland.freedesktop.org/
 
 use std::convert::TryInto;
-use std::error::Error;
 use std::ffi::CString;
 use std::fmt;
 use std::os::unix::io::RawFd;
+
+use thiserror::Error;
 
 mod codec;
 
@@ -312,18 +313,12 @@ tuple_impl! {
 }
 
 // === utility types ===
-#[derive(Debug)]
-enum ConversionErrorType {
-    Message,
-    Interface,
-    Protocol,
-}
-
 /// An attept to convert from a list type to an item in that list was unsucessful.
 ///
 /// The three list type for which this error might apply are a `MessageList`, an `InterfaceList`,
 /// and a `ProtocolList`.
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("Unable to convert a {typ} list to a {typ}.")]
 pub struct ConversionError {
     typ: ConversionErrorType,
 }
@@ -351,21 +346,27 @@ impl ConversionError {
     }
 }
 
-impl Error for ConversionError {}
+#[derive(Debug)]
+enum ConversionErrorType {
+    Message,
+    Interface,
+    Protocol,
+}
 
-impl fmt::Display for ConversionError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl fmt::Display for ConversionErrorType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use ConversionErrorType::*;
 
-        let typ = match self.typ {
+        let term = match self {
             Message => "message",
             Interface => "interface",
             Protocol => "protocol",
         };
 
-        write!(f, "Unable to convert a {} list to a {}.", typ, typ)
+        write!(f, "{}", term)
     }
 }
+
 
 pub(crate) trait Role {}
 
