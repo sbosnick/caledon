@@ -16,6 +16,8 @@ use std::ffi::CString;
 use std::fmt;
 use std::os::unix::io::RawFd;
 
+mod codec;
+
 /// An argument type for a [Wayland] message.
 ///
 /// The eight arguement types of the wire protocol map to Rust types as follows:
@@ -365,10 +367,18 @@ impl fmt::Display for ConversionError {
     }
 }
 
+pub(crate) trait Role {}
+
+struct Server {}
+impl Role for Server {}
+
+struct Client {}
+impl Role for Client {}
+
 mod private {
     use std::ffi::CString;
 
-    pub trait Sealed {}
+    pub trait Sealed: super::codec::ArgWriter {}
 
     impl Sealed for i32 {}
     impl Sealed for u32 {}
