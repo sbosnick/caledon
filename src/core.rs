@@ -206,18 +206,18 @@ macro_rules! tuple_signature_impl {
     );
 }
 
-tuple_signature_impl!{ A }
-tuple_signature_impl!{ A B }
-tuple_signature_impl!{ A B C }
-tuple_signature_impl!{ A B C D }
-tuple_signature_impl!{ A B C D E }
-tuple_signature_impl!{ A B C D E F }
-tuple_signature_impl!{ A B C D E F G }
-tuple_signature_impl!{ A B C D E F G H }
-tuple_signature_impl!{ A B C D E F G H I }
-tuple_signature_impl!{ A B C D E F G H I J }
-tuple_signature_impl!{ A B C D E F G H I J K }
-tuple_signature_impl!{ A B C D E F G H I J K L }
+tuple_signature_impl! { A }
+tuple_signature_impl! { A B }
+tuple_signature_impl! { A B C }
+tuple_signature_impl! { A B C D }
+tuple_signature_impl! { A B C D E }
+tuple_signature_impl! { A B C D E F }
+tuple_signature_impl! { A B C D E F G }
+tuple_signature_impl! { A B C D E F G H }
+tuple_signature_impl! { A B C D E F G H I }
+tuple_signature_impl! { A B C D E F G H I J }
+tuple_signature_impl! { A B C D E F G H I J K }
+tuple_signature_impl! { A B C D E F G H I J K L }
 
 // === utility types ===
 /// An attept to convert from a list type to an item in that list was unsucessful.
@@ -274,7 +274,6 @@ impl fmt::Display for ConversionErrorType {
     }
 }
 
-
 pub(crate) trait Role {}
 
 struct Server {}
@@ -296,7 +295,7 @@ mod private {
     impl ArgumentBase for Box<[u8]> {}
     impl ArgumentBase for super::Fd {}
 
-    pub trait SignatureBase {}
+    pub trait SignatureBase: super::codec::ArgWriter {}
 
     impl SignatureBase for () {}
 
@@ -306,19 +305,18 @@ mod private {
         );
     }
 
-    tuple_signature_base_impl!{ A }
-    tuple_signature_base_impl!{ A B }
-    tuple_signature_base_impl!{ A B C }
-    tuple_signature_base_impl!{ A B C D }
-    tuple_signature_base_impl!{ A B C D E }
-    tuple_signature_base_impl!{ A B C D E F }
-    tuple_signature_base_impl!{ A B C D E F G }
-    tuple_signature_base_impl!{ A B C D E F G H }
-    tuple_signature_base_impl!{ A B C D E F G H I }
-    tuple_signature_base_impl!{ A B C D E F G H I J }
-    tuple_signature_base_impl!{ A B C D E F G H I J K }
-    tuple_signature_base_impl!{ A B C D E F G H I J K L }
-
+    tuple_signature_base_impl! { A }
+    tuple_signature_base_impl! { A B }
+    tuple_signature_base_impl! { A B C }
+    tuple_signature_base_impl! { A B C D }
+    tuple_signature_base_impl! { A B C D E }
+    tuple_signature_base_impl! { A B C D E F }
+    tuple_signature_base_impl! { A B C D E F G }
+    tuple_signature_base_impl! { A B C D E F G H }
+    tuple_signature_base_impl! { A B C D E F G H I }
+    tuple_signature_base_impl! { A B C D E F G H I J }
+    tuple_signature_base_impl! { A B C D E F G H I J K }
+    tuple_signature_base_impl! { A B C D E F G H I J K L }
 }
 
 #[cfg(test)]

@@ -114,9 +114,9 @@ pub enum CodecError {
 
 // === ArgWriter ===
 
-// ArgWriter is the low-level interface to write the 7 argument types into the byte stream as a
-// part of the Wayland wire protocol. ArgWriter does not handle fd passing which will be dealt with
-// at a higher level.
+/// ArgWriter is the low-level interface to write the 7 argument types into the byte
+/// stream as a part of the Wayland wire protocol. ArgWriter does not handle fd
+/// passing which will be dealt with at a higher level.
 pub trait ArgWriter {
     fn len(&self) -> u16;
     fn write(&self, dst: &mut impl BufMut);
@@ -209,6 +209,46 @@ impl ArgWriter for super::Fd {
         // nothing to write as Fd's are passed differently
     }
 }
+
+impl ArgWriter for () {
+    fn len(&self) -> u16 {
+        0
+    }
+
+    fn write(&self, _dst: &mut impl BufMut) {
+        // an empty tuple has nothing to write
+    }
+}
+
+macro_rules! tuple_arg_writer_impl {
+    ( $($name:ident)+ ) => (
+        #[allow(non_snake_case)]
+        impl<$($name: ArgWriter),*> ArgWriter for ($($name,)+) {
+            fn len(&self) -> u16 {
+                let ($(ref $name,)*) = *self;
+                $($name.len() +)* 0
+            }
+
+            fn write(&self, dst: &mut impl BufMut) {
+                let ($(ref $name,)*) = *self;
+                $($name.write(dst);)*
+            }
+        }
+    );
+}
+
+tuple_arg_writer_impl! { A }
+tuple_arg_writer_impl! { A B }
+tuple_arg_writer_impl! { A B C }
+tuple_arg_writer_impl! { A B C D }
+tuple_arg_writer_impl! { A B C D E }
+tuple_arg_writer_impl! { A B C D E F }
+tuple_arg_writer_impl! { A B C D E F G }
+tuple_arg_writer_impl! { A B C D E F G H }
+tuple_arg_writer_impl! { A B C D E F G H I }
+tuple_arg_writer_impl! { A B C D E F G H I J }
+tuple_arg_writer_impl! { A B C D E F G H I J K }
+tuple_arg_writer_impl! { A B C D E F G H I J K L }
 
 fn padding<T>(val: u16) -> u16 {
     let align = mem::size_of::<T>() as u16;
@@ -339,6 +379,19 @@ mod tests {
         let vec = vec![b'h', b'e', b'l', b'l', b'o'];
 
         let sut = vec.into_boxed_slice();
+
+        arg_writer_writes_value(sut, expected);
+    }
+
+    #[test]
+    fn tuple_u8_cstring_writes_expected_value() {
+        let expected = &[
+            0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00,
+            0x00, 0x00,
+        ];
+        let hello = CString::new("hello").expect("bad CString");
+
+        let sut = (1u32, hello);
 
         arg_writer_writes_value(sut, expected);
     }
