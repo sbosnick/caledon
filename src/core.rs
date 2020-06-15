@@ -38,10 +38,12 @@ mod codec;
 /// Rust type are part of the standard library.
 ///
 /// This trait is sealed so there cannot be any implementations outside of this
-/// crate.
+/// crate. The details of the implementation of `Argument` are in the private
+/// `ArgumentBase` trait to allow implementation changes without them being breaking
+/// changes.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub trait Argument: private::Sealed {}
+pub trait Argument: private::ArgumentBase {}
 
 /// An object or new_id `Argument` for the [Wayland] wire protocol.
 ///
@@ -61,12 +63,15 @@ pub struct Fd(RawFd);
 ///
 /// The `Signature` for a message is a collection of the arguments for the message.
 /// It would typically be a tuple of `Argument` types. `Signature` is implemented in
-/// this crate for tuples up to 12 elements and it is unlikely that other
-/// implementations would be necessary (though `Signature` is not sealed should such
-/// a need arise).
+/// this crate for tuples up to 12 elements.
+///
+/// `Signature` is sealed so there cannot be any implementations outside of this
+/// crate. The details of the implementation of `Signature` are in the private
+/// `SignatureBase` trait to allow implementation change without them being breaking
+/// changes.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub trait Signature {}
+pub trait Signature: private::SignatureBase {}
 
 /// A particular [Wayland] message.
 ///
@@ -281,15 +286,39 @@ impl Role for Client {}
 mod private {
     use std::ffi::CString;
 
-    pub trait Sealed: super::codec::ArgWriter {}
+    pub trait ArgumentBase: super::codec::ArgWriter {}
 
-    impl Sealed for i32 {}
-    impl Sealed for u32 {}
-    impl Sealed for super::Decimal {}
-    impl Sealed for CString {}
-    impl Sealed for super::ObjectId {}
-    impl Sealed for Box<[u8]> {}
-    impl Sealed for super::Fd {}
+    impl ArgumentBase for i32 {}
+    impl ArgumentBase for u32 {}
+    impl ArgumentBase for super::Decimal {}
+    impl ArgumentBase for CString {}
+    impl ArgumentBase for super::ObjectId {}
+    impl ArgumentBase for Box<[u8]> {}
+    impl ArgumentBase for super::Fd {}
+
+    pub trait SignatureBase {}
+
+    impl SignatureBase for () {}
+
+    macro_rules! tuple_signature_base_impl {
+        ( $($name:ident)+ ) => (
+            impl<$($name: super::Argument),*> SignatureBase for ($($name,)+) {}
+        );
+    }
+
+    tuple_signature_base_impl!{ A }
+    tuple_signature_base_impl!{ A B }
+    tuple_signature_base_impl!{ A B C }
+    tuple_signature_base_impl!{ A B C D }
+    tuple_signature_base_impl!{ A B C D E }
+    tuple_signature_base_impl!{ A B C D E F }
+    tuple_signature_base_impl!{ A B C D E F G }
+    tuple_signature_base_impl!{ A B C D E F G H }
+    tuple_signature_base_impl!{ A B C D E F G H I }
+    tuple_signature_base_impl!{ A B C D E F G H I J }
+    tuple_signature_base_impl!{ A B C D E F G H I J K }
+    tuple_signature_base_impl!{ A B C D E F G H I J K L }
+
 }
 
 #[cfg(test)]
