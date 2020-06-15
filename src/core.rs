@@ -195,122 +195,24 @@ impl Argument for Fd {}
 // === impl Signature ===
 impl Signature for () {}
 
-macro_rules! tuple_impl {
-    ($(
-        $Tuple:ident {
-            $(($idx:tt) -> $T:ident)+
-        }
-    )+) => {
-        $(
-            impl<$($T:Argument),+> Signature for ($($T,)+) {}
-        )+
-    }
+macro_rules! tuple_signature_impl {
+    ( $($name:ident)+ ) => (
+        impl<$($name: Argument),*> Signature for ($($name,)+) {}
+    );
 }
 
-tuple_impl! {
-    Tuple1 {
-        (0) -> A
-    }
-    Tuple2 {
-        (0) -> A
-        (1) -> B
-    }
-    Tuple3 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-    }
-    Tuple4 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-        (3) -> D
-    }
-    Tuple5 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-        (3) -> D
-        (4) -> E
-    }
-    Tuple6 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-        (3) -> D
-        (4) -> E
-        (5) -> F
-    }
-    Tuple7 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-        (3) -> D
-        (4) -> E
-        (5) -> F
-        (6) -> G
-    }
-    Tuple8 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-        (3) -> D
-        (4) -> E
-        (5) -> F
-        (6) -> G
-        (7) -> H
-    }
-    Tuple9 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-        (3) -> D
-        (4) -> E
-        (5) -> F
-        (6) -> G
-        (7) -> H
-        (8) -> I
-    }
-    Tuple10 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-        (3) -> D
-        (4) -> E
-        (5) -> F
-        (6) -> G
-        (7) -> H
-        (8) -> I
-        (9) -> J
-    }
-    Tuple11 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-        (3) -> D
-        (4) -> E
-        (5) -> F
-        (6) -> G
-        (7) -> H
-        (8) -> I
-        (9) -> J
-        (10) -> K
-    }
-    Tuple12 {
-        (0) -> A
-        (1) -> B
-        (2) -> C
-        (3) -> D
-        (4) -> E
-        (5) -> F
-        (6) -> G
-        (7) -> H
-        (8) -> I
-        (9) -> J
-        (10) -> K
-        (11) -> L
-    }
-}
+tuple_signature_impl!{ A }
+tuple_signature_impl!{ A B }
+tuple_signature_impl!{ A B C }
+tuple_signature_impl!{ A B C D }
+tuple_signature_impl!{ A B C D E }
+tuple_signature_impl!{ A B C D E F }
+tuple_signature_impl!{ A B C D E F G }
+tuple_signature_impl!{ A B C D E F G H }
+tuple_signature_impl!{ A B C D E F G H I }
+tuple_signature_impl!{ A B C D E F G H I J }
+tuple_signature_impl!{ A B C D E F G H I J K }
+tuple_signature_impl!{ A B C D E F G H I J K L }
 
 // === utility types ===
 /// An attept to convert from a list type to an item in that list was unsucessful.
