@@ -41,7 +41,7 @@ where
     R: Role,
     P: ProtocolFamily,
 {
-    fn write_message<T>(&mut self, item: T, dst: &mut BytesMut) -> Result<(), CodecError>
+    fn encode_message<T>(&mut self, item: T, dst: &mut BytesMut) -> Result<(), CodecError>
     where
         T: Message,
     {
@@ -54,8 +54,8 @@ where
 
         dst.reserve(len);
 
-        WaylandHeader::new(item.sender().0, len as u16, T::OPCODE).write(dst);
-        item.args().write(dst);
+        WaylandHeader::new(item.sender().0, len as u16, T::OPCODE).encode(dst);
+        item.args().encode(dst);
 
         Ok(())
     }
@@ -76,7 +76,7 @@ where
     type Error = CodecError;
 
     fn encode(&mut self, item: T, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.write_message(item, dst)
+        self.encode_message(item, dst)
     }
 }
 
@@ -95,7 +95,7 @@ where
     type Error = CodecError;
 
     fn encode(&mut self, item: T, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.write_message(item, dst)
+        self.encode_message(item, dst)
     }
 }
 
@@ -144,9 +144,9 @@ impl WaylandHeader {
         (self.len_opcode & 0xFF) as u16
     }
 
-    fn write(&self, dst: &mut impl BufMut) {
-        write_u32(self.sender, dst);
-        write_u32(self.len_opcode, dst);
+    fn encode(&self, dst: &mut impl BufMut) {
+        encode_u32(self.sender, dst);
+        encode_u32(self.len_opcode, dst);
     }
 }
 
@@ -174,12 +174,12 @@ pub enum CodecError {
 
 // === ArgEncoder ===
 
-/// ArgEncoder is the low-level interface to write the 7 argument types into the byte
+/// ArgEncoder is the low-level interface to encode the 7 argument types into the byte
 /// stream as a part of the Wayland wire protocol. ArgEncoder does not handle fd
 /// passing which will be dealt with at a higher level.
 pub trait ArgEncoder {
     fn len(&self) -> u16;
-    fn write(&self, dst: &mut impl BufMut);
+    fn encode(&self, dst: &mut impl BufMut);
 }
 
 impl ArgEncoder for i32 {
@@ -187,8 +187,8 @@ impl ArgEncoder for i32 {
         mem::size_of::<Self>() as u16
     }
 
-    fn write(&self, dst: &mut impl BufMut) {
-        write_i32(*self, dst)
+    fn encode(&self, dst: &mut impl BufMut) {
+        encode_i32(*self, dst)
     }
 }
 
@@ -197,8 +197,8 @@ impl ArgEncoder for u32 {
         mem::size_of::<Self>() as u16
     }
 
-    fn write(&self, dst: &mut impl BufMut) {
-        write_u32(*self, dst)
+    fn encode(&self, dst: &mut impl BufMut) {
+        encode_u32(*self, dst)
     }
 }
 
@@ -207,8 +207,8 @@ impl ArgEncoder for super::Decimal {
         mem::size_of_val(&self.0) as u16
     }
 
-    fn write(&self, dst: &mut impl BufMut) {
-        write_u32(self.0, dst)
+    fn encode(&self, dst: &mut impl BufMut) {
+        encode_u32(self.0, dst)
     }
 }
 
@@ -219,11 +219,11 @@ impl ArgEncoder for CString {
         align_up::<u32>(length_size + content_size)
     }
 
-    fn write(&self, dst: &mut impl BufMut) {
+    fn encode(&self, dst: &mut impl BufMut) {
         let contents = self.as_bytes_with_nul();
         let padding = padding::<u32>(contents.len() as u16);
 
-        write_u32(contents.len() as u32, dst);
+        encode_u32(contents.len() as u32, dst);
         dst.put_slice(contents);
         for _ in 0..padding {
             dst.put_u8(0);
@@ -236,8 +236,8 @@ impl ArgEncoder for super::ObjectId {
         mem::size_of_val(&self.0) as u16
     }
 
-    fn write(&self, dst: &mut impl BufMut) {
-        write_u32(self.0, dst)
+    fn encode(&self, dst: &mut impl BufMut) {
+        encode_u32(self.0, dst)
     }
 }
 
@@ -248,11 +248,11 @@ impl ArgEncoder for Box<[u8]> {
         align_up::<u32>(length_size + content_size)
     }
 
-    fn write(&self, dst: &mut impl BufMut) {
+    fn encode(&self, dst: &mut impl BufMut) {
         let contents = self.as_ref();
         let padding = padding::<u32>(contents.len() as u16);
 
-        write_u32(contents.len() as u32, dst);
+        encode_u32(contents.len() as u32, dst);
         dst.put_slice(contents);
         for _ in 0..padding {
             dst.put_u8(0);
@@ -265,8 +265,8 @@ impl ArgEncoder for super::Fd {
         0
     }
 
-    fn write(&self, _dst: &mut impl BufMut) {
-        // nothing to write as Fd's are passed differently
+    fn encode(&self, _dst: &mut impl BufMut) {
+        // nothing to encode as Fd's are passed differently
     }
 }
 
@@ -275,12 +275,12 @@ impl ArgEncoder for () {
         0
     }
 
-    fn write(&self, _dst: &mut impl BufMut) {
-        // an empty tuple has nothing to write
+    fn encode(&self, _dst: &mut impl BufMut) {
+        // an empty tuple has nothing to encode
     }
 }
 
-macro_rules! tuple_arg_writer_impl {
+macro_rules! tuple_arg_encoder_impl {
     ( $($name:ident)+ ) => (
         #[allow(non_snake_case)]
         impl<$($name: ArgEncoder),*> ArgEncoder for ($($name,)+) {
@@ -289,26 +289,26 @@ macro_rules! tuple_arg_writer_impl {
                 $($name.len() +)* 0
             }
 
-            fn write(&self, dst: &mut impl BufMut) {
+            fn encode(&self, dst: &mut impl BufMut) {
                 let ($(ref $name,)*) = *self;
-                $($name.write(dst);)*
+                $($name.encode(dst);)*
             }
         }
     );
 }
 
-tuple_arg_writer_impl! { A }
-tuple_arg_writer_impl! { A B }
-tuple_arg_writer_impl! { A B C }
-tuple_arg_writer_impl! { A B C D }
-tuple_arg_writer_impl! { A B C D E }
-tuple_arg_writer_impl! { A B C D E F }
-tuple_arg_writer_impl! { A B C D E F G }
-tuple_arg_writer_impl! { A B C D E F G H }
-tuple_arg_writer_impl! { A B C D E F G H I }
-tuple_arg_writer_impl! { A B C D E F G H I J }
-tuple_arg_writer_impl! { A B C D E F G H I J K }
-tuple_arg_writer_impl! { A B C D E F G H I J K L }
+tuple_arg_encoder_impl! { A }
+tuple_arg_encoder_impl! { A B }
+tuple_arg_encoder_impl! { A B C }
+tuple_arg_encoder_impl! { A B C D }
+tuple_arg_encoder_impl! { A B C D E }
+tuple_arg_encoder_impl! { A B C D E F }
+tuple_arg_encoder_impl! { A B C D E F G }
+tuple_arg_encoder_impl! { A B C D E F G H }
+tuple_arg_encoder_impl! { A B C D E F G H I }
+tuple_arg_encoder_impl! { A B C D E F G H I J }
+tuple_arg_encoder_impl! { A B C D E F G H I J K }
+tuple_arg_encoder_impl! { A B C D E F G H I J K L }
 
 fn padding<T>(val: u16) -> u16 {
     let align = mem::size_of::<T>() as u16;
@@ -321,22 +321,22 @@ fn align_up<T>(val: u16) -> u16 {
 }
 
 #[cfg(target_endian = "little")]
-fn write_u32(val: u32, dst: &mut impl BufMut) {
+fn encode_u32(val: u32, dst: &mut impl BufMut) {
     dst.put_u32_le(val)
 }
 
 #[cfg(target_endian = "big")]
-fn write_u32(val: u32, dst: &mut impl BufMut) {
+fn encode_u32(val: u32, dst: &mut impl BufMut) {
     dst.put_u32(val)
 }
 
 #[cfg(target_endian = "little")]
-fn write_i32(val: i32, dst: &mut impl BufMut) {
+fn encode_i32(val: i32, dst: &mut impl BufMut) {
     dst.put_i32_le(val)
 }
 
 #[cfg(target_endian = "big")]
-fn write_i32(val: i32, dst: &mut impl BufMut) {
+fn encode_i32(val: i32, dst: &mut impl BufMut) {
     dst.put_i32(val)
 }
 
@@ -375,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn arg_writer_for_fixed_size_gives_expected_len() {
+    fn arg_encoder_for_fixed_size_gives_expected_len() {
         assert_eq!(1i32.len(), 4);
         assert_eq!(1u32.len(), 4);
         assert_eq!(Decimal(1).len(), 4);
@@ -384,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn arg_writer_for_cstring_gives_expected_len() {
+    fn arg_encoder_for_cstring_gives_expected_len() {
         let sut = CString::new("hello").expect("bad CString");
         let result = sut.len();
 
@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn arg_writer_for_box_u8_slice_gives_expected_len() {
+    fn arg_encoder_for_box_u8_slice_gives_expected_len() {
         let vec = vec![b'h', b'e', b'l', b'l', b'o'];
 
         let sut = vec.into_boxed_slice();
@@ -402,48 +402,48 @@ mod tests {
     }
 
     #[test]
-    fn arg_writer_writes_u32() {
-        arg_writer_writes_value(1u32, &[0x01, 0x00, 0x00, 0x00]);
+    fn arg_encoder_encodes_u32() {
+        arg_encoder_encodes_value(1u32, &[0x01, 0x00, 0x00, 0x00]);
     }
 
     #[test]
-    fn arg_writer_writes_i32() {
-        arg_writer_writes_value(1i32, &[0x01, 0x00, 0x00, 0x00]);
+    fn arg_encoder_encodes_i32() {
+        arg_encoder_encodes_value(1i32, &[0x01, 0x00, 0x00, 0x00]);
     }
 
     #[test]
-    fn arg_writer_writes_decimal() {
-        arg_writer_writes_value(Decimal(1), &[0x01, 0x00, 0x00, 0x00]);
+    fn arg_encoder_encodes_decimal() {
+        arg_encoder_encodes_value(Decimal(1), &[0x01, 0x00, 0x00, 0x00]);
     }
 
     #[test]
-    fn arg_writer_writes_object_id() {
-        arg_writer_writes_value(ObjectId(1), &[0x01, 0x00, 0x00, 0x00]);
+    fn arg_encoder_encodes_object_id() {
+        arg_encoder_encodes_value(ObjectId(1), &[0x01, 0x00, 0x00, 0x00]);
     }
 
     #[test]
-    fn arg_writer_writes_nothing_for_fd() {
+    fn arg_encoder_encodes_nothing_for_fd() {
         let mut buf = BytesMut::with_capacity(50);
 
         let sut = Fd(1);
-        sut.write(&mut buf);
+        sut.encode(&mut buf);
 
         assert!(buf.is_empty());
     }
 
     #[test]
-    fn arg_writer_writes_cstring() {
+    fn arg_encoder_encodes_cstring() {
         let expected = &[
             0x06, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00, 0x00, 0x00,
         ];
 
         let sut = CString::new("hello").expect("bad CString");
 
-        arg_writer_writes_value(sut, expected);
+        arg_encoder_encodes_value(sut, expected);
     }
 
     #[test]
-    fn arg_writer_writes_box_u8_slice() {
+    fn arg_encoder_encodes_box_u8_slice() {
         let expected = &[
             0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00, 0x00, 0x00,
         ];
@@ -451,11 +451,11 @@ mod tests {
 
         let sut = vec.into_boxed_slice();
 
-        arg_writer_writes_value(sut, expected);
+        arg_encoder_encodes_value(sut, expected);
     }
 
     #[test]
-    fn tuple_u8_cstring_writes_expected_value() {
+    fn tuple_u8_cstring_encodes_expected_value() {
         let expected = &[
             0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00,
             0x00, 0x00,
@@ -464,13 +464,13 @@ mod tests {
 
         let sut = (1u32, hello);
 
-        arg_writer_writes_value(sut, expected);
+        arg_encoder_encodes_value(sut, expected);
     }
 
-    fn arg_writer_writes_value(sut: impl ArgEncoder, expected: &[u8]) {
+    fn arg_encoder_encodes_value(sut: impl ArgEncoder, expected: &[u8]) {
         let mut buf = BytesMut::with_capacity(50);
 
-        sut.write(&mut buf);
+        sut.encode(&mut buf);
 
         assert_eq!(buf, expected);
     }
