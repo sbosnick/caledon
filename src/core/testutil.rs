@@ -21,6 +21,14 @@ impl Message for DestroyRequest {
     const OPCODE: u16 = 0;
     type Signature = ();
     type MessageList = Requests;
+
+    fn args(&self) -> &Self::Signature {
+        &()
+    }
+
+    fn sender(&self) -> ObjectId {
+        ObjectId(1)
+    }
 }
 
 pub struct ConjoinRequest {}
@@ -28,6 +36,15 @@ impl Message for ConjoinRequest {
     const OPCODE: u16 = 1;
     type Signature = (ObjectId,);
     type MessageList = Requests;
+
+    fn args(&self) -> &Self::Signature {
+        static FIXED_ARGS: (ObjectId,) = (ObjectId(2),);
+        &FIXED_ARGS
+    }
+
+    fn sender(&self) -> ObjectId {
+        ObjectId(1)
+    }
 }
 
 pub enum Requests {
@@ -73,6 +90,14 @@ impl Message for PreFdEvent {
     const OPCODE: u16 = 0;
     type Signature = ();
     type MessageList = Events;
+
+    fn args(&self) -> &Self::Signature {
+        &()
+    }
+
+    fn sender(&self) -> ObjectId {
+        ObjectId(1)
+    }
 }
 
 pub struct FdEvent {}
@@ -80,6 +105,16 @@ impl Message for FdEvent {
     const OPCODE: u16 = 1;
     type Signature = (Fd,);
     type MessageList = Events;
+
+    fn args(&self) -> &Self::Signature {
+        static FIXED_ARGS: (Fd,) = (Fd(3),);
+
+        &FIXED_ARGS
+    }
+
+    fn sender(&self) -> ObjectId {
+        ObjectId(1)
+    }
 }
 
 pub enum Events {

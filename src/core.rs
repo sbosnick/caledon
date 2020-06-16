@@ -48,6 +48,7 @@ pub trait Argument: private::ArgumentBase {}
 /// An object or new_id `Argument` for the [Wayland] wire protocol.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
+#[derive(Debug)]
 pub struct ObjectId(u32);
 
 /// A fixed decimal `Argument` for the [Wayland] wire protocol.
@@ -91,6 +92,12 @@ pub trait Message: Sized {
     /// The message list to which this message belongs. It will be either the
     /// list of requests or the list of events for some `Interface`.
     type MessageList: MessageList + From<Self> + TryInto<Self>;
+
+    /// The arguments for this `Message`.
+    fn args(&self) -> &Self::Signature;
+
+    /// The object that is sending the `Message`.
+    fn sender(&self) -> ObjectId;
 }
 
 /// A list of [Wayland] messages associated with a particular interface.

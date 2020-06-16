@@ -41,8 +41,23 @@ where
     R: Role,
     P: ProtocolFamily,
 {
-    fn write_message<T>(&mut self, _item: T, _dst: &mut BytesMut) -> Result<(), CodecError> {
-        todo!()
+    fn write_message<T>(&mut self, item: T, dst: &mut BytesMut) -> Result<(), CodecError>
+    where
+        T: Message,
+    {
+        let len = mem::size_of::<WaylandHeader>() + item.args().len() as usize;
+        if len > u16::MAX as usize {
+            return Err(CodecError::MessageTooLong {
+                object: item.sender(),
+            });
+        }
+
+        dst.reserve(len);
+
+        WaylandHeader::new(item.sender().0, len as u16, T::OPCODE).write(dst);
+        item.args().write(dst);
+
+        Ok(())
     }
 }
 
@@ -93,6 +108,48 @@ impl<R, P> Decoder for Codec<R, P> {
     }
 }
 
+// === WaylandHeader ===
+
+#[repr(C)]
+struct WaylandHeader {
+    sender: u32,
+
+    // This isn't 2 u16's to make sure we maintain host endianness for this as a u32.
+    len_opcode: u32,
+}
+
+impl WaylandHeader {
+    fn new(sender: u32, len: u16, obcode: u16) -> WaylandHeader {
+        WaylandHeader {
+            sender,
+            len_opcode: ((len as u32) << 16) | (obcode as u32),
+        }
+    }
+
+    // TODO: remove this when no longer needed
+    #[allow(dead_code)]
+    fn sender(&self) -> u32 {
+        self.sender
+    }
+
+    // TODO: remove this when no longer needed
+    #[allow(dead_code)]
+    fn len(&self) -> u16 {
+        (self.len_opcode >> 16) as u16
+    }
+
+    // TODO: remove this when no longer needed
+    #[allow(dead_code)]
+    fn opcode(&self) -> u16 {
+        (self.len_opcode & 0xFF) as u16
+    }
+
+    fn write(&self, dst: &mut impl BufMut) {
+        write_u32(self.sender, dst);
+        write_u32(self.len_opcode, dst);
+    }
+}
+
 // === DispatchMessage ===
 
 pub struct DispatchMessage {
@@ -110,6 +167,9 @@ pub enum CodecError {
         #[from]
         source: io::Error,
     },
+
+    #[error("message sent from object {} is too long", object.0)]
+    MessageTooLong { object: ObjectId },
 }
 
 // === ArgWriter ===
@@ -288,8 +348,6 @@ mod tests {
     use crate::core::{Decimal, Fd, ObjectId};
 
     #[test]
-    // TODO: remove this once the code is written
-    #[ignore]
     fn encode_messages_by_role() {
         let mut server = Codec::new(Server {}, Family {});
         let mut client = Codec::new(Client {}, Family {});
@@ -301,6 +359,19 @@ mod tests {
         // The next 2 lines are compiler errors because of a mismatch between
         // Client/Server and Event/Requests.  server.encode(DestroyRequest{}, &mut
         // buffer).unwrap(); client.encode(PreFdEvent{}, &mut buffer).unwrap();
+    }
+
+    #[test]
+    fn encode_message_gives_expected_bytes() {
+        let mut buffer = BytesMut::new();
+
+        let mut sut = Codec::new(Client {}, Family {});
+        sut.encode(DestroyRequest {}, &mut buffer).unwrap();
+
+        assert_eq!(
+            buffer,
+            &[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00,].as_ref()
+        );
     }
 
     #[test]
