@@ -292,7 +292,7 @@ impl Role for Client {}
 mod private {
     use std::ffi::CString;
 
-    pub trait ArgumentBase: super::codec::ArgWriter {}
+    pub trait ArgumentBase: super::codec::ArgEncoder {}
 
     impl ArgumentBase for i32 {}
     impl ArgumentBase for u32 {}
@@ -302,7 +302,7 @@ mod private {
     impl ArgumentBase for Box<[u8]> {}
     impl ArgumentBase for super::Fd {}
 
-    pub trait SignatureBase: super::codec::ArgWriter {}
+    pub trait SignatureBase: super::codec::ArgEncoder {}
 
     impl SignatureBase for () {}
 

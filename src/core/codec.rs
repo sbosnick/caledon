@@ -172,17 +172,17 @@ pub enum CodecError {
     MessageTooLong { object: ObjectId },
 }
 
-// === ArgWriter ===
+// === ArgEncoder ===
 
-/// ArgWriter is the low-level interface to write the 7 argument types into the byte
-/// stream as a part of the Wayland wire protocol. ArgWriter does not handle fd
+/// ArgEncoder is the low-level interface to write the 7 argument types into the byte
+/// stream as a part of the Wayland wire protocol. ArgEncoder does not handle fd
 /// passing which will be dealt with at a higher level.
-pub trait ArgWriter {
+pub trait ArgEncoder {
     fn len(&self) -> u16;
     fn write(&self, dst: &mut impl BufMut);
 }
 
-impl ArgWriter for i32 {
+impl ArgEncoder for i32 {
     fn len(&self) -> u16 {
         mem::size_of::<Self>() as u16
     }
@@ -192,7 +192,7 @@ impl ArgWriter for i32 {
     }
 }
 
-impl ArgWriter for u32 {
+impl ArgEncoder for u32 {
     fn len(&self) -> u16 {
         mem::size_of::<Self>() as u16
     }
@@ -202,7 +202,7 @@ impl ArgWriter for u32 {
     }
 }
 
-impl ArgWriter for super::Decimal {
+impl ArgEncoder for super::Decimal {
     fn len(&self) -> u16 {
         mem::size_of_val(&self.0) as u16
     }
@@ -212,7 +212,7 @@ impl ArgWriter for super::Decimal {
     }
 }
 
-impl ArgWriter for CString {
+impl ArgEncoder for CString {
     fn len(&self) -> u16 {
         let length_size = mem::size_of::<u32>() as u16;
         let content_size = self.as_bytes_with_nul().len() as u16;
@@ -231,7 +231,7 @@ impl ArgWriter for CString {
     }
 }
 
-impl ArgWriter for super::ObjectId {
+impl ArgEncoder for super::ObjectId {
     fn len(&self) -> u16 {
         mem::size_of_val(&self.0) as u16
     }
@@ -241,7 +241,7 @@ impl ArgWriter for super::ObjectId {
     }
 }
 
-impl ArgWriter for Box<[u8]> {
+impl ArgEncoder for Box<[u8]> {
     fn len(&self) -> u16 {
         let length_size = mem::size_of::<u32>() as u16;
         let content_size = self.as_ref().len() as u16;
@@ -260,7 +260,7 @@ impl ArgWriter for Box<[u8]> {
     }
 }
 
-impl ArgWriter for super::Fd {
+impl ArgEncoder for super::Fd {
     fn len(&self) -> u16 {
         0
     }
@@ -270,7 +270,7 @@ impl ArgWriter for super::Fd {
     }
 }
 
-impl ArgWriter for () {
+impl ArgEncoder for () {
     fn len(&self) -> u16 {
         0
     }
@@ -283,7 +283,7 @@ impl ArgWriter for () {
 macro_rules! tuple_arg_writer_impl {
     ( $($name:ident)+ ) => (
         #[allow(non_snake_case)]
-        impl<$($name: ArgWriter),*> ArgWriter for ($($name,)+) {
+        impl<$($name: ArgEncoder),*> ArgEncoder for ($($name,)+) {
             fn len(&self) -> u16 {
                 let ($(ref $name,)*) = *self;
                 $($name.len() +)* 0
@@ -467,7 +467,7 @@ mod tests {
         arg_writer_writes_value(sut, expected);
     }
 
-    fn arg_writer_writes_value(sut: impl ArgWriter, expected: &[u8]) {
+    fn arg_writer_writes_value(sut: impl ArgEncoder, expected: &[u8]) {
         let mut buf = BytesMut::with_capacity(50);
 
         sut.write(&mut buf);
