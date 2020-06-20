@@ -282,13 +282,15 @@ impl fmt::Display for ConversionErrorType {
     }
 }
 
+/// Internal marker trait to allow specializaton of other types to either servers or
+/// clients.
 pub(crate) trait Role {}
 
-struct Server {}
-impl Role for Server {}
+struct ServerRole {}
+impl Role for ServerRole {}
 
-struct Client {}
-impl Role for Client {}
+struct ClientRole {}
+impl Role for ClientRole {}
 
 mod private {
     use std::ffi::CString;

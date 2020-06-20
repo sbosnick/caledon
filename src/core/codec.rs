@@ -17,8 +17,8 @@ use thiserror::Error;
 use tokio_util::codec::{Decoder, Encoder};
 
 use super::{
-    Client, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol, ProtocolFamily,
-    ProtocolList, Role, Server, Signature,
+    ClientRole, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol, ProtocolFamily,
+    ProtocolList, Role, ServerRole, Signature,
 };
 
 // === WaylandCodec ===
@@ -87,7 +87,7 @@ where
     }
 }
 
-impl<T, P> Encoder<T> for WaylandCodec<Server, P>
+impl<T, P> Encoder<T> for WaylandCodec<ServerRole, P>
 where
     T: Message,
     <<T as Message>::MessageList as MessageList>::Interface : Interface<
@@ -106,7 +106,7 @@ where
     }
 }
 
-impl<T, P> Encoder<T> for WaylandCodec<Client, P>
+impl<T, P> Encoder<T> for WaylandCodec<ClientRole, P>
 where
     T: Message,
     <<T as Message>::MessageList as MessageList>::Interface : Interface<
@@ -578,8 +578,8 @@ mod tests {
 
     #[test]
     fn encode_messages_by_role() {
-        let mut server = WaylandCodec::new(Server {}, Family {});
-        let mut client = WaylandCodec::new(Client {}, Family {});
+        let mut server = WaylandCodec::new(ServerRole {}, Family {});
+        let mut client = WaylandCodec::new(ClientRole {}, Family {});
         let mut buffer = BytesMut::new();
 
         client.encode(DestroyRequest {}, &mut buffer).unwrap();
@@ -594,7 +594,7 @@ mod tests {
     fn encode_message_gives_expected_bytes() {
         let mut buffer = BytesMut::new();
 
-        let mut sut = WaylandCodec::new(Client {}, Family {});
+        let mut sut = WaylandCodec::new(ClientRole {}, Family {});
         sut.encode(DestroyRequest {}, &mut buffer).unwrap();
 
         assert_eq!(
@@ -791,7 +791,7 @@ mod tests {
     fn decode_header_without_enough_wants_more() {
         let mut buf: BytesMut = [0x01u8, 0x00, 0x00, 0x00].as_ref().into();
 
-        let mut sut = WaylandCodec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -801,7 +801,7 @@ mod tests {
     fn decode_empty_header_wants_more() {
         let mut buf = BytesMut::new();
 
-        let mut sut = WaylandCodec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -811,7 +811,7 @@ mod tests {
     fn decode_header_without_args_gives_expected_result() {
         let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 8, 0].as_ref().into();
 
-        let mut sut = WaylandCodec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(Some(msg)) => {
@@ -825,7 +825,7 @@ mod tests {
     fn decode_header_without_expected_args_wants_more() {
         let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0].as_ref().into();
 
-        let mut sut = WaylandCodec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -835,7 +835,7 @@ mod tests {
     fn decode_header_with_args_gives_expected_result() {
         let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0].as_ref().into();
 
-        let mut sut = WaylandCodec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(Some(msg)) => {
@@ -854,7 +854,7 @@ mod tests {
         .as_ref()
         .into();
 
-        let mut sut = WaylandCodec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
         let _ = sut.decode(&mut buf);
         let result = sut.decode(&mut buf);
 
