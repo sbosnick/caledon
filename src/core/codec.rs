@@ -6,7 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
-use std::ffi::CString;
+use std::fmt::Debug;
+use std::ffi::{self, CString};
 use std::io;
 use std::marker::PhantomData;
 use std::mem;
@@ -235,6 +236,12 @@ pub enum CodecError {
 
     #[error("message sent from object {} is too long", object.0)]
     MessageTooLong { object: ObjectId },
+
+    #[error("string argument contained unexpected nul bytes")]
+    InvalidStringArg {
+        #[from]
+        source: ffi::NulError,
+    }
 }
 
 // === ArgEncoder ===
@@ -375,6 +382,76 @@ tuple_arg_encoder_impl! { A B C D E F G H I J }
 tuple_arg_encoder_impl! { A B C D E F G H I J K }
 tuple_arg_encoder_impl! { A B C D E F G H I J K L }
 
+// === ArgDecoder ===
+
+/// ArgDecoder is the low-level interface to decode the 7 argument types from the
+/// byte stream as a part of the Wayland wire protocol. ArgDecoder does not handle fd
+/// passing which will be dealt with at a higher level (the return value from
+/// Fd::decode() is a fake value that should be replaced at the higher level).
+pub trait ArgDecoder: Sized {
+    fn decode(src: &mut impl Buf) -> Result<Self, CodecError>;
+}
+
+impl ArgDecoder for i32 {
+    fn decode(src: &mut impl Buf) -> Result<Self, CodecError> {
+        Ok(decode_i32(src))
+    }
+}
+
+impl ArgDecoder for u32 {
+    fn decode(src: &mut impl Buf) -> Result<Self, CodecError> {
+        Ok(decode_u32(src))
+    }
+}
+
+impl ArgDecoder for super::Decimal {
+    fn decode(src: &mut impl Buf) -> Result<Self, CodecError> {
+        Ok(Self(decode_u32(src)))
+    }
+}
+
+impl ArgDecoder for CString {
+    fn decode(src: &mut impl Buf) -> Result<Self, CodecError> {
+        let len = decode_u32(src);
+        let padding = padding::<u32>(len as u16);
+
+        let mut buf = vec![0; len as usize - 1];
+        src.copy_to_slice(&mut buf);
+
+        // advance past the nul byte and the padding
+        src.advance(1 + padding as usize);
+
+        Ok(CString::new(buf)?)
+    }
+}
+
+impl ArgDecoder for super::ObjectId {
+    fn decode(src: &mut impl Buf) -> Result<Self, CodecError> {
+        Ok(Self(decode_u32(src)))
+    }
+}
+
+impl ArgDecoder for Box<[u8]> {
+    fn decode(src: &mut impl Buf) -> Result<Self, CodecError> {
+        let len = decode_u32(src);
+        let mut buf = vec![0; len as usize];
+        src.copy_to_slice(&mut buf);
+
+        Ok(buf.into_boxed_slice())
+    }
+}
+
+impl ArgDecoder for super::Fd {
+    fn decode(_src: &mut impl Buf) -> Result<Self, CodecError> {
+        // Fd's take up 0 space in the byte stream as they are passed differently.
+        // Return a dummy Fd on the assumption that a higher later will replace it
+        // with the actual Fd.
+        Ok(Self(0))
+    }
+}
+
+// === utility functions ===
+
 fn padding<T>(val: u16) -> u16 {
     let align = mem::size_of::<T>() as u16;
 
@@ -413,6 +490,16 @@ fn decode_u32(src: &mut impl Buf) -> u32 {
 #[cfg(target_endian = "big")]
 fn decode_u32(src: &mut impl Buf) -> u32 {
     src.get_u32()
+}
+
+#[cfg(target_endian = "little")]
+fn decode_i32(src: &mut impl Buf) -> i32 {
+    src.get_i32_le()
+}
+
+#[cfg(target_endian = "big")]
+fn decode_i32(src: &mut impl Buf) -> i32 {
+    src.get_i32()
 }
 
 #[cfg(test)]
@@ -550,6 +637,81 @@ mod tests {
         sut.encode(&mut buf);
 
         assert_eq!(buf, expected);
+    }
+
+    #[test]
+    fn arg_decoder_decodes_u32() {
+        arg_decoder_decodes_value(&[1, 0, 0, 0], 1u32);
+    }
+
+    #[test]
+    fn arg_decoder_decodes_i32() {
+        arg_decoder_decodes_value(&[1, 0, 0, 0], 1i32);
+    }
+
+    #[test]
+    fn arg_decoder_decodes_decemial() {
+        arg_decoder_decodes_value(&[1, 0, 0, 0], Decimal(1));
+    }
+
+    #[test]
+    fn arg_decoder_decodes_object_id() {
+        arg_decoder_decodes_value(&[1, 0, 0, 0], ObjectId(1));
+    }
+
+    #[test]
+    fn arg_decoder_uses_no_bytes_for_fd() {
+        let array = &[1u8, 0, 0, 0];
+        let mut buf = array.as_ref();
+
+        Fd::decode(&mut buf).expect("Unexpected error in decode()");
+
+        assert_eq!(buf.len(), 4);
+    }
+
+    #[test]
+    fn arg_decoder_decodes_cstring() {
+        let array = &[6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0];
+        let mut buf = array.as_ref();
+
+        let result = CString::decode(&mut buf);
+
+        assert_matches!(result, Ok(string) => {
+            assert_eq!(string, CString::new("hello").unwrap());
+        });
+    }
+
+    #[test]
+    fn arg_decoder_invalid_cstring_is_error() {
+        // array has a nul byte in the middle of the CString portion
+        let array = &[6, 0, 0, 0, b'h', b'e', b'l', 0, b'o', 0, 0, 0];
+        let mut buf = array.as_ref();
+
+        let result = CString::decode(&mut buf);
+
+        assert_matches!(result, Err(CodecError::InvalidStringArg{source: _}));
+    }
+
+    #[test]
+    fn arg_decoder_decodes_array() {
+        let array = &[5, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0];
+        let mut buf = array.as_ref();
+        let expected = vec![b'h', b'e', b'l', b'l', b'o'];
+
+        let result = Box::<[u8]>::decode(&mut buf);
+
+        assert_matches!(result, Ok(array) => {
+            assert_eq!(array, expected.into_boxed_slice());
+        });
+    }
+
+    fn arg_decoder_decodes_value<A>(mut src: &[u8], expected: A)
+    where
+        A: ArgDecoder+Debug+PartialEq
+    {
+        let result = A::decode(&mut src).expect("Decode failed unexpectedly.");
+
+        assert_eq!(result, expected);
     }
 
     #[test]

@@ -52,6 +52,7 @@ pub trait Argument: private::ArgumentBase {}
 pub struct ObjectId(u32);
 
 /// A fixed decimal `Argument` for the [Wayland] wire protocol.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Decimal(u32);
 
 /// An fd `Argument` for the [Wayland] wire protocol.
@@ -291,8 +292,9 @@ impl Role for Client {}
 
 mod private {
     use std::ffi::CString;
+    use super::codec::{ArgEncoder, ArgDecoder};
 
-    pub trait ArgumentBase: super::codec::ArgEncoder {}
+    pub trait ArgumentBase: ArgEncoder+ArgDecoder {}
 
     impl ArgumentBase for i32 {}
     impl ArgumentBase for u32 {}
@@ -302,7 +304,7 @@ mod private {
     impl ArgumentBase for Box<[u8]> {}
     impl ArgumentBase for super::Fd {}
 
-    pub trait SignatureBase: super::codec::ArgEncoder {}
+    pub trait SignatureBase: ArgEncoder {}
 
     impl SignatureBase for () {}
 
