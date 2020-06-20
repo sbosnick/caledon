@@ -18,7 +18,7 @@ use tokio_util::codec::{Decoder, Encoder};
 
 use super::{
     Client, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol, ProtocolFamily,
-    ProtocolList, Role, Server,
+    ProtocolList, Role, Server, Signature,
 };
 
 // === WaylandCodec ===
@@ -207,8 +207,6 @@ enum DecodeState {
 pub struct DispatchMessage {
     object_id: ObjectId,
     opcode: u16,
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     args: Bytes,
 }
 
@@ -221,6 +219,10 @@ impl DispatchMessage {
 
     pub fn opcode(&self) -> u16 {
         self.opcode
+    }
+
+    pub fn extract_args<S: Signature>(&mut self) -> Result<S, CodecError> {
+        S::decode(&mut self.args)
     }
 }
 
