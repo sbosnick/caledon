@@ -11,7 +11,7 @@ use std::io;
 use std::marker::PhantomData;
 use std::mem;
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -23,6 +23,7 @@ use super::{
 // === Codec ===
 
 pub(crate) struct Codec<R, P> {
+    decode_state: DecodeState,
     _marker: PhantomData<(R, P)>,
 }
 
@@ -31,6 +32,7 @@ impl<R, P> Codec<R, P> {
     #[allow(dead_code)]
     pub(crate) fn new(_role: R, _family: P) -> Codec<R, P> {
         Codec {
+            decode_state: DecodeState::Head,
             _marker: PhantomData,
         }
     }
@@ -45,7 +47,7 @@ where
     where
         T: Message,
     {
-        let len = mem::size_of::<WaylandHeader>() + item.args().len() as usize;
+        let len = WaylandHeader::size() + item.args().len() as usize;
         if len > u16::MAX as usize {
             return Err(CodecError::MessageTooLong {
                 object: item.sender(),
@@ -103,14 +105,46 @@ impl<R, P> Decoder for Codec<R, P> {
     type Item = DispatchMessage;
     type Error = CodecError;
 
-    fn decode(&mut self, _src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        todo!()
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let head = match &self.decode_state {
+            DecodeState::Head => match WaylandHeader::decode(src) {
+                None => {
+                    src.reserve(WaylandHeader::size() - src.len());
+                    return Ok(None);
+                }
+                Some(head) => {
+                    self.decode_state = DecodeState::Args(head);
+                    head
+                }
+            },
+            DecodeState::Args(head) => *head,
+        };
+
+        if src.len() < head.len() as usize - WaylandHeader::size() {
+            // Reserve space for the remaining bytes of this messages and the header
+            // of the next message. Since head.len() includes the current header
+            // bytes we don't have to add WaylandHeader::size() again.
+            src.reserve(head.len() as usize - src.len());
+            Ok(None)
+        } else {
+            let args = src
+                .split_to(head.len() as usize - WaylandHeader::size())
+                .freeze();
+            src.reserve(WaylandHeader::size() - src.len());
+            self.decode_state = DecodeState::Head;
+
+            Ok(Some(DispatchMessage {
+                object_id: ObjectId(head.sender()),
+                opcode: head.opcode(),
+                args,
+            }))
+        }
     }
 }
 
 // === WaylandHeader ===
 
-#[repr(C)]
+#[derive(Clone, Copy)]
 struct WaylandHeader {
     sender: u32,
 
@@ -126,20 +160,18 @@ impl WaylandHeader {
         }
     }
 
-    // TODO: remove this when no longer needed
-    #[allow(dead_code)]
+    fn size() -> usize {
+        2 * mem::size_of::<u32>()
+    }
+
     fn sender(&self) -> u32 {
         self.sender
     }
 
-    // TODO: remove this when no longer needed
-    #[allow(dead_code)]
     fn len(&self) -> u16 {
         (self.len_opcode >> 16) as u16
     }
 
-    // TODO: remove this when no longer needed
-    #[allow(dead_code)]
     fn opcode(&self) -> u16 {
         (self.len_opcode & 0xFF) as u16
     }
@@ -148,14 +180,47 @@ impl WaylandHeader {
         encode_u32(self.sender, dst);
         encode_u32(self.len_opcode, dst);
     }
+
+    fn decode(src: &mut impl Buf) -> Option<WaylandHeader> {
+        if src.remaining() < WaylandHeader::size() {
+            None
+        } else {
+            Some(WaylandHeader {
+                sender: decode_u32(src),
+                len_opcode: decode_u32(src),
+            })
+        }
+    }
+}
+
+// === DecodeState ===
+
+enum DecodeState {
+    Head,
+    Args(WaylandHeader),
 }
 
 // === DispatchMessage ===
 
+#[derive(Debug, PartialEq)]
 pub struct DispatchMessage {
-    _object_id: ObjectId,
-    _opcode: u16,
-    _args: Bytes,
+    object_id: ObjectId,
+    opcode: u16,
+    // TODO: remove this when it is no longer needed
+    #[allow(dead_code)]
+    args: Bytes,
+}
+
+// TODO: remove this when it is no longer needed
+#[allow(dead_code)]
+impl DispatchMessage {
+    pub fn object_id(&self) -> ObjectId {
+        self.object_id
+    }
+
+    pub fn opcode(&self) -> u16 {
+        self.opcode
+    }
 }
 
 // === CodecError ===
@@ -340,9 +405,21 @@ fn encode_i32(val: i32, dst: &mut impl BufMut) {
     dst.put_i32(val)
 }
 
+#[cfg(target_endian = "little")]
+fn decode_u32(src: &mut impl Buf) -> u32 {
+    src.get_u32_le()
+}
+
+#[cfg(target_endian = "big")]
+fn decode_u32(src: &mut impl Buf) -> u32 {
+    src.get_u32()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use assert_matches::assert_matches;
 
     use crate::core::testutil::{DestroyRequest, Family, PreFdEvent};
     use crate::core::{Decimal, Fd, ObjectId};
@@ -473,5 +550,83 @@ mod tests {
         sut.encode(&mut buf);
 
         assert_eq!(buf, expected);
+    }
+
+    #[test]
+    fn decode_header_without_enough_wants_more() {
+        let mut buf: BytesMut = [0x01u8, 0x00, 0x00, 0x00].as_ref().into();
+
+        let mut sut = Codec::new(Server {}, Family {});
+        let result = sut.decode(&mut buf);
+
+        assert_matches!(result, Ok(None));
+    }
+
+    #[test]
+    fn decode_empty_header_wants_more() {
+        let mut buf = BytesMut::new();
+
+        let mut sut = Codec::new(Server {}, Family {});
+        let result = sut.decode(&mut buf);
+
+        assert_matches!(result, Ok(None));
+    }
+
+    #[test]
+    fn decode_header_without_args_gives_expected_result() {
+        let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 8, 0].as_ref().into();
+
+        let mut sut = Codec::new(Server {}, Family {});
+        let result = sut.decode(&mut buf);
+
+        assert_matches!(result, Ok(Some(msg)) => {
+            assert_eq!(msg.object_id, ObjectId(1));
+            assert_eq!(msg.opcode(), 0);
+            assert_eq!(msg.args.len(), 0);
+        });
+    }
+
+    #[test]
+    fn decode_header_without_expected_args_wants_more() {
+        let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0].as_ref().into();
+
+        let mut sut = Codec::new(Server {}, Family {});
+        let result = sut.decode(&mut buf);
+
+        assert_matches!(result, Ok(None));
+    }
+
+    #[test]
+    fn decode_header_with_args_gives_expected_result() {
+        let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0].as_ref().into();
+
+        let mut sut = Codec::new(Server {}, Family {});
+        let result = sut.decode(&mut buf);
+
+        assert_matches!(result, Ok(Some(msg)) => {
+            assert_eq!(msg.object_id, ObjectId(1));
+            assert_eq!(msg.opcode(), 0);
+            assert_eq!(msg.args.len(), 4);
+            assert_eq!(msg.args, [2, 0, 0, 0].as_ref());
+        });
+    }
+
+    #[test]
+    fn decode_two_messages_gives_expected_result() {
+        let mut buf: BytesMut = [
+            1u8, 0, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 0,
+        ]
+        .as_ref()
+        .into();
+
+        let mut sut = Codec::new(Server {}, Family {});
+        let _ = sut.decode(&mut buf);
+        let result = sut.decode(&mut buf);
+
+        assert_matches!(result, Ok(Some(msg)) => {
+            assert_eq!(msg.object_id, ObjectId(1));
+            assert_eq!(msg.opcode(), 1);
+            assert_eq!(msg.args.len(), 0);
+        });
     }
 }
