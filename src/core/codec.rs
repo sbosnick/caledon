@@ -11,6 +11,7 @@ use std::ffi::{self, CString};
 use std::io;
 use std::marker::PhantomData;
 use std::mem;
+use std::u16;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
