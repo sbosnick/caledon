@@ -20,25 +20,25 @@ use super::{
     ProtocolList, Role, Server,
 };
 
-// === Codec ===
+// === WaylandCodec ===
 
-pub(crate) struct Codec<R, P> {
+pub(crate) struct WaylandCodec<R, P> {
     decode_state: DecodeState,
     _marker: PhantomData<(R, P)>,
 }
 
-impl<R, P> Codec<R, P> {
+impl<R, P> WaylandCodec<R, P> {
     // TODO remove this when it is no longer needed
     #[allow(dead_code)]
-    pub(crate) fn new(_role: R, _family: P) -> Codec<R, P> {
-        Codec {
+    pub(crate) fn new(_role: R, _family: P) -> WaylandCodec<R, P> {
+        WaylandCodec {
             decode_state: DecodeState::Head,
             _marker: PhantomData,
         }
     }
 }
 
-impl<R, P> Codec<R, P>
+impl<R, P> WaylandCodec<R, P>
 where
     R: Role,
     P: ProtocolFamily,
@@ -63,7 +63,7 @@ where
     }
 }
 
-impl<T, P> Encoder<T> for Codec<Server, P>
+impl<T, P> Encoder<T> for WaylandCodec<Server, P>
 where
     T: Message,
     <<T as Message>::MessageList as MessageList>::Interface : Interface<
@@ -82,7 +82,7 @@ where
     }
 }
 
-impl<T, P> Encoder<T> for Codec<Client, P>
+impl<T, P> Encoder<T> for WaylandCodec<Client, P>
 where
     T: Message,
     <<T as Message>::MessageList as MessageList>::Interface : Interface<
@@ -101,7 +101,7 @@ where
     }
 }
 
-impl<R, P> Decoder for Codec<R, P> {
+impl<R, P> Decoder for WaylandCodec<R, P> {
     type Item = DispatchMessage;
     type Error = CodecError;
 
@@ -426,8 +426,8 @@ mod tests {
 
     #[test]
     fn encode_messages_by_role() {
-        let mut server = Codec::new(Server {}, Family {});
-        let mut client = Codec::new(Client {}, Family {});
+        let mut server = WaylandCodec::new(Server {}, Family {});
+        let mut client = WaylandCodec::new(Client {}, Family {});
         let mut buffer = BytesMut::new();
 
         client.encode(DestroyRequest {}, &mut buffer).unwrap();
@@ -442,7 +442,7 @@ mod tests {
     fn encode_message_gives_expected_bytes() {
         let mut buffer = BytesMut::new();
 
-        let mut sut = Codec::new(Client {}, Family {});
+        let mut sut = WaylandCodec::new(Client {}, Family {});
         sut.encode(DestroyRequest {}, &mut buffer).unwrap();
 
         assert_eq!(
@@ -556,7 +556,7 @@ mod tests {
     fn decode_header_without_enough_wants_more() {
         let mut buf: BytesMut = [0x01u8, 0x00, 0x00, 0x00].as_ref().into();
 
-        let mut sut = Codec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(Server {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -566,7 +566,7 @@ mod tests {
     fn decode_empty_header_wants_more() {
         let mut buf = BytesMut::new();
 
-        let mut sut = Codec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(Server {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -576,7 +576,7 @@ mod tests {
     fn decode_header_without_args_gives_expected_result() {
         let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 8, 0].as_ref().into();
 
-        let mut sut = Codec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(Server {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(Some(msg)) => {
@@ -590,7 +590,7 @@ mod tests {
     fn decode_header_without_expected_args_wants_more() {
         let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0].as_ref().into();
 
-        let mut sut = Codec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(Server {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -600,7 +600,7 @@ mod tests {
     fn decode_header_with_args_gives_expected_result() {
         let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0].as_ref().into();
 
-        let mut sut = Codec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(Server {}, Family {});
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(Some(msg)) => {
@@ -619,7 +619,7 @@ mod tests {
         .as_ref()
         .into();
 
-        let mut sut = Codec::new(Server {}, Family {});
+        let mut sut = WaylandCodec::new(Server {}, Family {});
         let _ = sut.decode(&mut buf);
         let result = sut.decode(&mut buf);
 
