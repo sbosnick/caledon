@@ -450,6 +450,38 @@ impl ArgDecoder for super::Fd {
     }
 }
 
+impl ArgDecoder for () {
+    fn decode(_src: &mut impl Buf) -> Result<Self, CodecError> {
+        Ok(())
+    }
+}
+
+macro_rules! tuple_arg_decoder_impl {
+    ( $($name:ident)+ ) => (
+        #[allow(non_snake_case)]
+        impl<$($name: ArgDecoder),*> ArgDecoder for ($($name,)+) {
+            fn decode(src: &mut impl Buf) -> Result<Self, CodecError> {
+                $(let $name = $name::decode(src)?;)*
+
+                Ok( ( $($name,)* ))
+            }
+        }
+    );
+}
+
+tuple_arg_decoder_impl! { A }
+tuple_arg_decoder_impl! { A B }
+tuple_arg_decoder_impl! { A B C }
+tuple_arg_decoder_impl! { A B C D }
+tuple_arg_decoder_impl! { A B C D E }
+tuple_arg_decoder_impl! { A B C D E F }
+tuple_arg_decoder_impl! { A B C D E F G }
+tuple_arg_decoder_impl! { A B C D E F G H }
+tuple_arg_decoder_impl! { A B C D E F G H I }
+tuple_arg_decoder_impl! { A B C D E F G H I J }
+tuple_arg_decoder_impl! { A B C D E F G H I J K }
+tuple_arg_decoder_impl! { A B C D E F G H I J K L }
+
 // === utility functions ===
 
 fn padding<T>(val: u16) -> u16 {
@@ -703,6 +735,14 @@ mod tests {
         assert_matches!(result, Ok(array) => {
             assert_eq!(array, expected.into_boxed_slice());
         });
+    }
+
+    #[test]
+    fn tuple_u8_cstring_decodes_from_bytes() {
+        let buf = &[1, 0, 0, 0, 6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0];
+        let string = CString::new("hello").expect("bad CString");
+
+        arg_decoder_decodes_value(buf, (1u32, string));
     }
 
     fn arg_decoder_decodes_value<A>(mut src: &[u8], expected: A)

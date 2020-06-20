@@ -304,7 +304,7 @@ mod private {
     impl ArgumentBase for Box<[u8]> {}
     impl ArgumentBase for super::Fd {}
 
-    pub trait SignatureBase: ArgEncoder {}
+    pub trait SignatureBase: ArgEncoder+ArgDecoder {}
 
     impl SignatureBase for () {}
 
