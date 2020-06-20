@@ -23,6 +23,29 @@ use super::{
 
 // === WaylandCodec ===
 
+/// `WaylandCodec` provides the byte stream part of the [Wayland] wire protocol.
+///
+/// The `Decoder` and `Encoder` implementations on `WaylandCodec` allow for decoding
+/// and encoding [Wayland] `Message`'s, but do not implement the fd passing that is a
+/// part of the wire protocol. The fd passing must be layered on top of a transport
+/// dervided from `WaylandCodec`.
+///
+/// Encoding `Message`'s is done directly. That is, an implementation of `Message` is
+/// passed to `encode()` directly and it's wire protocol representation is encoded
+/// (except for fd passing as noted above).
+///
+/// Decoding `Message`'s, on the other hand, is a two-step process. The `Decoder` for
+/// a `WaylandCodec` decodes a `DispatchMessage` which provides enough information to
+/// dispatch the message. Once the message has been dispatch and its `Signature` is
+/// known, `DispatchMessage::extract_args()` will extract the arguments for that
+/// message.
+///
+/// `WaylandCodec` is paramaterized by a `Role` (server or client) and a
+/// `ProtocolFamily`. These are used at complile time to enforce encoding only
+/// messages for the `ProtocolFamily` and to enforce encoding only requests for
+/// clients and events for servers.
+///
+/// [Wayland]: https://wayland.freedesktop.org/
 pub(crate) struct WaylandCodec<R, P> {
     decode_state: DecodeState,
     _marker: PhantomData<(R, P)>,
@@ -203,6 +226,8 @@ enum DecodeState {
 
 // === DispatchMessage ===
 
+/// `DispatchMessage` is phase 1 of the `WaylandCodec` decoding and allows for the
+/// phase 2 decoding.
 #[derive(Debug, PartialEq)]
 pub struct DispatchMessage {
     object_id: ObjectId,
@@ -213,14 +238,20 @@ pub struct DispatchMessage {
 // TODO: remove this when it is no longer needed
 #[allow(dead_code)]
 impl DispatchMessage {
+    /// The `ObjectId` to which to dispatch this message.
     pub fn object_id(&self) -> ObjectId {
         self.object_id
     }
 
+    /// The opcode to invoice on the object for this message.
     pub fn opcode(&self) -> u16 {
         self.opcode
     }
 
+    /// Extract the arguments for the message once the `Signature` is known.
+    ///
+    /// This is phase 2 of the `WaylandCodec` decoding and is destructive (it should
+    /// not be called twice).
     pub fn extract_args<S: Signature>(&mut self) -> Result<S, CodecError> {
         S::decode(&mut self.args)
     }
