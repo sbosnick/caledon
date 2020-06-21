@@ -3,8 +3,12 @@ name = "caledon"
 version = "0.1.0"
 authors = ["Steven Bosnick <sbosnick@sympatico.ca>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Caledon is a Rust implemention of the Wayland protocol."
+readme = "README.md"
+repository = "https://github.com/sbosnick/caledon"
+license = "MIT OR Apache-2.0"
+categories = ["graphics", "gui", "rendering"]
+keywords = ["wayland", "protocol"]
 
 [dependencies]
 tokio-util = { version = "0.3.1", features = ["codec"] }
