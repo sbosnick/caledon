@@ -6,46 +6,50 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
-use std::pin::Pin;
 use std::ffi::CString;
+use std::pin::Pin;
 
 // TODO: remove this when no longer needed
 #[allow(unused_imports)]
 use fd_queue::{DequeueFd, EnqueueFd, QueueFullError};
-use futures_core::{task::{Context, Poll}, stream::Stream};
+use futures_core::{
+    stream::Stream,
+    task::{Context, Poll},
+};
 use futures_sink::Sink;
 use pin_project::pin_project;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_util::codec::{Framed, Decoder};
+use tokio_util::codec::{Decoder, Framed};
 
-use super::{ClientRole, Interface, InterfaceList, Message, MessageList, Protocol, ProtocolList, ProtocolFamily, ServerRole};
 use super::codec::{CodecError, WaylandCodec};
+use super::{
+    ClientRole, Interface, InterfaceList, Message, MessageList, Protocol, ProtocolFamily,
+    ProtocolList, ServerRole,
+};
 
 // === WaylandTransport ===
 
 #[pin_project]
-pub struct WaylandTransport<T, R, P>
-{
-    #[allow(dead_code)]
+pub struct WaylandTransport<T, R, P> {
     #[pin]
-    inner: Framed<T, WaylandCodec<R,P>>,
+    inner: Framed<T, WaylandCodec<R, P>>,
 }
 
-impl<T,R,P> WaylandTransport<T,R,P>
+impl<T, R, P> WaylandTransport<T, R, P>
 where
-    T: AsyncWrite+AsyncRead,
+    T: AsyncWrite + AsyncRead,
 {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
-    fn new(io: T) -> WaylandTransport<T,R,P> {
+    fn new(io: T) -> WaylandTransport<T, R, P> {
         WaylandTransport {
-            inner: WaylandCodec::<R,P>::default().framed(io),
+            inner: WaylandCodec::<R, P>::default().framed(io),
         }
     }
 }
 
-impl<T,R,P> Stream for WaylandTransport<T,R,P> {
+impl<T, R, P> Stream for WaylandTransport<T, R, P> {
     type Item = DispatchMessage;
 
     fn poll_next(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Option<Self::Item>> {
@@ -241,13 +245,13 @@ mod tests {
     use std::io;
     use std::os::unix::io::{AsRawFd, RawFd};
 
-    use futures::sink::SinkExt;
     use futures::executor::block_on;
+    use futures::sink::SinkExt;
     use futures_ringbuf::RingBuffer as AsyncRingBuffer;
     use ringbuf::{Consumer, Producer, RingBuffer};
 
-    use crate::core::{Fd, Decimal, ObjectId};
-    use crate::core::testutil::{FdEvent, Family};
+    use crate::core::testutil::{Family, FdEvent};
+    use crate::core::{Decimal, Fd, ObjectId};
 
     struct MockQueue(Option<RawFd>);
 
@@ -320,13 +324,21 @@ mod tests {
     }
 
     impl AsyncRead for FakeEndpoint {
-        fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut [u8],
+        ) -> Poll<io::Result<usize>> {
             self.project().io.poll_read(cx, buf)
         }
     }
 
     impl AsyncWrite for FakeEndpoint {
-        fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<Result<usize, io::Error>> {
             self.project().io.poll_write(cx, buf)
         }
 
@@ -334,14 +346,19 @@ mod tests {
             self.project().io.poll_flush(cx)
         }
 
-        fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        fn poll_shutdown(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Result<(), io::Error>> {
             self.project().io.poll_shutdown(cx)
         }
     }
 
     impl EnqueueFd for FakeEndpoint {
         fn enqueue(&mut self, fd: &impl AsRawFd) -> Result<(), QueueFullError> {
-            self.producer.push(fd.as_raw_fd()).map_err(|_| QueueFullError::new())
+            self.producer
+                .push(fd.as_raw_fd())
+                .map_err(|_| QueueFullError::new())
         }
     }
 

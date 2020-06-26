@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
-use std::fmt::Debug;
 use std::ffi::{self, CString};
+use std::fmt::Debug;
 use std::io;
 use std::marker::PhantomData;
 use std::mem;
@@ -156,7 +156,7 @@ impl<R, P> Decoder for WaylandCodec<R, P> {
     }
 }
 
-impl<R,P> Default for WaylandCodec<R,P> {
+impl<R, P> Default for WaylandCodec<R, P> {
     fn default() -> Self {
         WaylandCodec {
             decode_state: DecodeState::Head,
@@ -273,7 +273,7 @@ pub enum CodecError {
     InvalidStringArg {
         #[from]
         source: ffi::NulError,
-    }
+    },
 }
 
 // === ArgEncoder ===
@@ -753,7 +753,7 @@ mod tests {
 
         let result = CString::decode(&mut buf);
 
-        assert_matches!(result, Err(CodecError::InvalidStringArg{source: _}));
+        assert_matches!(result, Err(CodecError::InvalidStringArg { source: _ }));
     }
 
     #[test]
@@ -771,7 +771,9 @@ mod tests {
 
     #[test]
     fn tuple_u8_cstring_decodes_from_bytes() {
-        let buf = &[1, 0, 0, 0, 6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0];
+        let buf = &[
+            1, 0, 0, 0, 6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0,
+        ];
         let string = CString::new("hello").expect("bad CString");
 
         arg_decoder_decodes_value(buf, (1u32, string));
@@ -779,7 +781,7 @@ mod tests {
 
     fn arg_decoder_decodes_value<A>(mut src: &[u8], expected: A)
     where
-        A: ArgDecoder+Debug+PartialEq
+        A: ArgDecoder + Debug + PartialEq,
     {
         let result = A::decode(&mut src).expect("Decode failed unexpectedly.");
 

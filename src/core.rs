@@ -302,11 +302,11 @@ struct ClientRole {}
 impl Role for ClientRole {}
 
 mod private {
-    use std::ffi::CString;
-    use super::codec::{ArgEncoder, ArgDecoder};
+    use super::codec::{ArgDecoder, ArgEncoder};
     use super::transport::ArgEnqueueFd;
+    use std::ffi::CString;
 
-    pub trait ArgumentBase: ArgEncoder+ArgDecoder+ArgEnqueueFd {}
+    pub trait ArgumentBase: ArgEncoder + ArgDecoder + ArgEnqueueFd {}
 
     impl ArgumentBase for i32 {}
     impl ArgumentBase for u32 {}
@@ -316,7 +316,7 @@ mod private {
     impl ArgumentBase for Box<[u8]> {}
     impl ArgumentBase for super::Fd {}
 
-    pub trait SignatureBase: ArgEncoder+ArgDecoder+ArgEnqueueFd {}
+    pub trait SignatureBase: ArgEncoder + ArgDecoder + ArgEnqueueFd {}
 
     impl SignatureBase for () {}
 
