@@ -19,7 +19,6 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Framed, Decoder};
 
-//use super::{Role, ProtocolFamily};
 use super::{ClientRole, Interface, InterfaceList, Message, MessageList, Protocol, ProtocolList, ProtocolFamily, ServerRole};
 use super::codec::{CodecError, WaylandCodec};
 
@@ -27,10 +26,6 @@ use super::codec::{CodecError, WaylandCodec};
 
 #[pin_project]
 pub struct WaylandTransport<T, R, P>
-//where
-//    T: EnqueueFd+DequeueFd+AsyncRead+AsyncWrite,
-//    R: Role,
-//    P: ProtocolFamily,
 {
     #[allow(dead_code)]
     #[pin]
