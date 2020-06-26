@@ -100,20 +100,29 @@ impl Message for PreFdEvent {
     }
 }
 
-pub struct FdEvent {}
+pub struct FdEvent {
+    sender: ObjectId,
+    args: (Fd,),
+}
+impl FdEvent {
+    pub fn new(sender: ObjectId, fd: Fd) -> Self {
+        Self {
+            sender,
+            args: (fd,),
+        }
+    }
+}
 impl Message for FdEvent {
     const OPCODE: u16 = 1;
     type Signature = (Fd,);
     type MessageList = Events;
 
     fn args(&self) -> &Self::Signature {
-        static FIXED_ARGS: (Fd,) = (Fd(3),);
-
-        &FIXED_ARGS
+        &self.args
     }
 
     fn sender(&self) -> ObjectId {
-        ObjectId(1)
+        self.sender
     }
 }
 

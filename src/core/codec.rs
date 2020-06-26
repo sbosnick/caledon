@@ -52,17 +52,6 @@ pub(crate) struct WaylandCodec<R, P> {
     _marker: PhantomData<(R, P)>,
 }
 
-impl<R, P> WaylandCodec<R, P> {
-    // TODO remove this when it is no longer needed
-    #[allow(dead_code)]
-    pub(crate) fn new(_role: R, _family: P) -> WaylandCodec<R, P> {
-        WaylandCodec {
-            decode_state: DecodeState::Head,
-            _marker: PhantomData,
-        }
-    }
-}
-
 impl<R, P> WaylandCodec<R, P>
 where
     R: Role,
@@ -163,6 +152,15 @@ impl<R, P> Decoder for WaylandCodec<R, P> {
                 opcode: head.opcode(),
                 args,
             }))
+        }
+    }
+}
+
+impl<R,P> Default for WaylandCodec<R,P> {
+    fn default() -> Self {
+        WaylandCodec {
+            decode_state: DecodeState::Head,
+            _marker: PhantomData,
         }
     }
 }
@@ -579,8 +577,8 @@ mod tests {
 
     #[test]
     fn encode_messages_by_role() {
-        let mut server = WaylandCodec::new(ServerRole {}, Family {});
-        let mut client = WaylandCodec::new(ClientRole {}, Family {});
+        let mut server = WaylandCodec::<ServerRole, Family>::default();
+        let mut client = WaylandCodec::<ClientRole, Family>::default();
         let mut buffer = BytesMut::new();
 
         client.encode(DestroyRequest {}, &mut buffer).unwrap();
@@ -595,7 +593,7 @@ mod tests {
     fn encode_message_gives_expected_bytes() {
         let mut buffer = BytesMut::new();
 
-        let mut sut = WaylandCodec::new(ClientRole {}, Family {});
+        let mut sut = WaylandCodec::<ClientRole, Family>::default();
         sut.encode(DestroyRequest {}, &mut buffer).unwrap();
 
         assert_eq!(
@@ -792,7 +790,7 @@ mod tests {
     fn decode_header_without_enough_wants_more() {
         let mut buf: BytesMut = [0x01u8, 0x00, 0x00, 0x00].as_ref().into();
 
-        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
+        let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -802,7 +800,7 @@ mod tests {
     fn decode_empty_header_wants_more() {
         let mut buf = BytesMut::new();
 
-        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
+        let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -812,7 +810,7 @@ mod tests {
     fn decode_header_without_args_gives_expected_result() {
         let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 8, 0].as_ref().into();
 
-        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
+        let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(Some(msg)) => {
@@ -826,7 +824,7 @@ mod tests {
     fn decode_header_without_expected_args_wants_more() {
         let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0].as_ref().into();
 
-        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
+        let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -836,7 +834,7 @@ mod tests {
     fn decode_header_with_args_gives_expected_result() {
         let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0].as_ref().into();
 
-        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
+        let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(Some(msg)) => {
@@ -855,7 +853,7 @@ mod tests {
         .as_ref()
         .into();
 
-        let mut sut = WaylandCodec::new(ServerRole {}, Family {});
+        let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let _ = sut.decode(&mut buf);
         let result = sut.decode(&mut buf);
 

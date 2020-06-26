@@ -13,11 +13,12 @@
 use std::convert::TryInto;
 use std::ffi::CString;
 use std::fmt;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{AsRawFd, RawFd};
 
 use thiserror::Error;
 
 mod codec;
+mod transport;
 
 /// An argument type for a [Wayland] message.
 ///
@@ -196,6 +197,14 @@ pub trait ProtocolFamily {
     type Protocols: ProtocolList;
 }
 
+// === impl Fd ===
+
+impl AsRawFd for &Fd {
+    fn as_raw_fd(&self) -> RawFd {
+        self.0
+    }
+}
+
 // === impl Argument ===
 impl Argument for i32 {}
 impl Argument for u32 {}
@@ -295,8 +304,9 @@ impl Role for ClientRole {}
 mod private {
     use std::ffi::CString;
     use super::codec::{ArgEncoder, ArgDecoder};
+    use super::transport::ArgEnqueueFd;
 
-    pub trait ArgumentBase: ArgEncoder+ArgDecoder {}
+    pub trait ArgumentBase: ArgEncoder+ArgDecoder+ArgEnqueueFd {}
 
     impl ArgumentBase for i32 {}
     impl ArgumentBase for u32 {}
@@ -306,7 +316,7 @@ mod private {
     impl ArgumentBase for Box<[u8]> {}
     impl ArgumentBase for super::Fd {}
 
-    pub trait SignatureBase: ArgEncoder+ArgDecoder {}
+    pub trait SignatureBase: ArgEncoder+ArgDecoder+ArgEnqueueFd {}
 
     impl SignatureBase for () {}
 
