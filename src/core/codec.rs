@@ -234,8 +234,6 @@ pub struct DispatchMessage {
     args: Bytes,
 }
 
-// TODO: remove this when it is no longer needed
-#[allow(dead_code)]
 impl DispatchMessage {
     /// The `ObjectId` to which to dispatch this message.
     pub fn object_id(&self) -> ObjectId {

@@ -7,6 +7,7 @@
 // except according to those terms
 
 use std::ffi::CString;
+use std::fmt::Debug;
 use std::pin::Pin;
 
 use fd_queue::{DequeueFd, EnqueueFd, QueueFullError};
@@ -23,7 +24,7 @@ use tokio_util::codec::{Decoder, Framed};
 use super::codec::{self, CodecError, WaylandCodec};
 use super::{
     ClientRole, Fd, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol,
-    ProtocolFamily, ProtocolList, ServerRole,
+    ProtocolFamily, ProtocolList, ServerRole, Signature,
 };
 
 // === WaylandTransport ===
@@ -176,6 +177,25 @@ impl DispatchMessage {
     fn new(inner: codec::DispatchMessage, fd: Option<Fd>) -> DispatchMessage {
         DispatchMessage { inner, fd }
     }
+
+    // TODO: remove this when it is no longer needed
+    #[allow(dead_code)]
+    pub fn object_id(&self) -> ObjectId {
+        self.inner.object_id()
+    }
+
+    // TODO: remove this when it is no longer needed
+    #[allow(dead_code)]
+    pub fn opcode(&self) -> u16 {
+        self.inner.opcode()
+    }
+
+    // TODO: remove this when it is no longer needed
+    #[allow(dead_code)]
+    pub fn extract_args<S: Signature>(&mut self) -> Result<S, TransportError> {
+        let args = self.inner.extract_args::<S>()?;
+        args.map_fd(&mut self.fd)
+    }
 }
 
 // === MessageFdMap ===
@@ -202,6 +222,9 @@ pub enum TransportError {
 
     #[error("Expected file descriptor for opcode {opcode} on {object_id} missing")]
     MissingFd { object_id: ObjectId, opcode: u16 },
+
+    #[error("Internal error: expected file descriptor absent when mapping arguments")]
+    UnexpectedAbsentFd,
 }
 
 impl TransportError {
@@ -296,6 +319,86 @@ tuple_arg_enqueue_fd_impl! { A B C D E F G H I J }
 tuple_arg_enqueue_fd_impl! { A B C D E F G H I J K }
 tuple_arg_enqueue_fd_impl! { A B C D E F G H I J K L }
 
+// === ArgDequeueFd ===
+
+pub trait ArgDequeueFd: Sized {
+    fn map_fd(self, fd: &mut Option<Fd>) -> Result<Self, TransportError>;
+}
+
+impl ArgDequeueFd for Fd {
+    fn map_fd(self, fd: &mut Option<Fd>) -> Result<Self, TransportError> {
+        fd.take().ok_or(TransportError::UnexpectedAbsentFd)
+    }
+}
+
+impl ArgDequeueFd for i32 {
+    fn map_fd(self, _fd: &mut Option<Fd>) -> Result<Self, TransportError> {
+        Ok(self)
+    }
+}
+
+impl ArgDequeueFd for u32 {
+    fn map_fd(self, _fd: &mut Option<Fd>) -> Result<Self, TransportError> {
+        Ok(self)
+    }
+}
+
+impl ArgDequeueFd for super::Decimal {
+    fn map_fd(self, _fd: &mut Option<Fd>) -> Result<Self, TransportError> {
+        Ok(self)
+    }
+}
+
+impl ArgDequeueFd for super::ObjectId {
+    fn map_fd(self, _fd: &mut Option<Fd>) -> Result<Self, TransportError> {
+        Ok(self)
+    }
+}
+
+impl ArgDequeueFd for CString {
+    fn map_fd(self, _fd: &mut Option<Fd>) -> Result<Self, TransportError> {
+        Ok(self)
+    }
+}
+
+impl ArgDequeueFd for Box<[u8]> {
+    fn map_fd(self, _fd: &mut Option<Fd>) -> Result<Self, TransportError> {
+        Ok(self)
+    }
+}
+
+impl ArgDequeueFd for () {
+    fn map_fd(self, _fd: &mut Option<Fd>) -> Result<Self, TransportError> {
+        Ok(())
+    }
+}
+
+macro_rules! tuple_arg_dequeue_fd_impl {
+    ( $($name:ident)+ ) => (
+        impl<$($name: ArgDequeueFd),*> ArgDequeueFd for ($($name,)+) {
+            #[allow(non_snake_case)]
+            fn map_fd(self, fd: &mut Option<Fd>) -> Result<Self, TransportError> {
+                let ($(mut $name,)*) = self;
+                $($name = $name.map_fd(fd)?;)*
+                Ok(($($name,)+))
+            }
+        }
+    );
+}
+
+tuple_arg_dequeue_fd_impl! { A }
+tuple_arg_dequeue_fd_impl! { A B }
+tuple_arg_dequeue_fd_impl! { A B C }
+tuple_arg_dequeue_fd_impl! { A B C D }
+tuple_arg_dequeue_fd_impl! { A B C D E }
+tuple_arg_dequeue_fd_impl! { A B C D E F }
+tuple_arg_dequeue_fd_impl! { A B C D E F G }
+tuple_arg_dequeue_fd_impl! { A B C D E F G H }
+tuple_arg_dequeue_fd_impl! { A B C D E F G H I }
+tuple_arg_dequeue_fd_impl! { A B C D E F G H I J }
+tuple_arg_dequeue_fd_impl! { A B C D E F G H I J K }
+tuple_arg_dequeue_fd_impl! { A B C D E F G H I J K L }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,6 +464,68 @@ mod tests {
     #[test]
     fn arg_enqueue_for_no_fd_tuple_does_not_enqueue() {
         arg_enqueue_does_not_enqueue((3u32, 4i32));
+    }
+
+    #[test]
+    fn arg_dequeue_for_fd_maps_fd() {
+        let expected_fd = 1;
+        let mut holder = Some(Fd(expected_fd));
+
+        let sut = Fd(0);
+        let result = sut.map_fd(&mut holder);
+
+        assert!(holder.is_none());
+        assert_matches!(result, Ok(Fd(fd)) => assert_eq!(fd, expected_fd));
+    }
+
+    #[test]
+    fn arg_dequeue_for_fd_without_fd_is_error() {
+        let mut holder = None;
+
+        let sut = Fd(0);
+        let result = sut.map_fd(&mut holder);
+
+        assert!(holder.is_none());
+        assert_matches!(result, Err(_));
+    }
+
+    #[test]
+    fn arg_dequeue_for_others_is_itentity() {
+        arg_dequeue_is_identity(1i32);
+        arg_dequeue_is_identity(1u32);
+        arg_dequeue_is_identity(CString::new("hello").unwrap());
+        arg_dequeue_is_identity(vec![b'h', b'e'].into_boxed_slice());
+        arg_dequeue_is_identity(Decimal(1));
+        arg_dequeue_is_identity(ObjectId(1));
+    }
+
+    fn arg_dequeue_is_identity<T: ArgDequeueFd + Debug + PartialEq + Clone>(sut: T) {
+        let mut holder = Some(Fd(0));
+
+        let result = sut.clone().map_fd(&mut holder);
+
+        assert!(holder.is_some());
+        assert_matches!(result, Ok(t) => assert_eq!(t, sut));
+    }
+
+    #[test]
+    fn arg_dequeue_for_fd_tuple_maps_fd() {
+        let expected_fd = 1;
+        let mut holder = Some(Fd(expected_fd));
+
+        let sut = (1u32, Fd(0));
+        let result = sut.map_fd(&mut holder);
+
+        assert!(holder.is_none());
+        assert_matches!(result, Ok((a, Fd(fd))) => {
+            assert_eq!(fd, expected_fd);
+            assert_eq!(a, 1u32);
+        });
+    }
+
+    #[test]
+    fn arg_dequeue_for_no_fd_tuple_is_identity() {
+        arg_dequeue_is_identity((1u32, 1i32));
     }
 
     #[pin_project]
@@ -455,7 +620,7 @@ mod tests {
     }
 
     #[test]
-    fn transport_send_and_receives_fd() {
+    fn transport_sends_and_receives_fd() {
         let endpoint = FakeEndpoint::default();
         let message = FdEvent::new(ObjectId(2), Fd(4));
         let map = FakeMessageFdMap::new(true);
@@ -465,5 +630,20 @@ mod tests {
         let result = block_on(sut.next());
 
         assert_matches!(result, Some(Ok(DispatchMessage{ inner: _, fd: Some(_) })));
+    }
+
+    #[test]
+    fn transport_dispatch_message_extracts_fd() {
+        let expected_fd = 4;
+        let endpoint = FakeEndpoint::default();
+        let message = FdEvent::new(ObjectId(2), Fd(expected_fd));
+        let map = FakeMessageFdMap::new(true);
+
+        let mut sut = WaylandTransport::<_, ServerRole, Family, _>::new(endpoint, map);
+        block_on(sut.send(message)).expect("Unable to send message.");
+        let mut msg = block_on(sut.next()).unwrap().unwrap();
+        let args = msg.extract_args::<<FdEvent as Message>::Signature>();
+
+        assert_matches!(args, Ok((Fd(fd),)) => assert_eq!(fd, expected_fd));
     }
 }
