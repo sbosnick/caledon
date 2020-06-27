@@ -42,9 +42,9 @@ jobs:
 
       - name: Clippy
         if: matrix.rust == 'stable'
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/clippy-check@v1
         with:
-            command: clippy
+            token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test
         uses: actions-rs/cargo@v1
