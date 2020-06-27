@@ -9,8 +9,6 @@
 use std::ffi::CString;
 use std::pin::Pin;
 
-// TODO: remove this when no longer needed
-#[allow(unused_imports)]
 use fd_queue::{DequeueFd, EnqueueFd, QueueFullError};
 use futures_core::{
     stream::Stream,
@@ -22,42 +20,77 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Decoder, Framed};
 
-use super::codec::{CodecError, WaylandCodec};
+use super::codec::{self, CodecError, WaylandCodec};
 use super::{
-    ClientRole, Interface, InterfaceList, Message, MessageList, Protocol, ProtocolFamily,
-    ProtocolList, ServerRole,
+    ClientRole, Fd, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol,
+    ProtocolFamily, ProtocolList, ServerRole,
 };
 
 // === WaylandTransport ===
 
 #[pin_project]
-pub struct WaylandTransport<T, R, P> {
+pub struct WaylandTransport<T, R, P, M> {
     #[pin]
     inner: Framed<T, WaylandCodec<R, P>>,
+    map: M,
 }
 
-impl<T, R, P> WaylandTransport<T, R, P>
+impl<T, R, P, M> WaylandTransport<T, R, P, M>
 where
     T: AsyncWrite + AsyncRead,
 {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
-    fn new(io: T) -> WaylandTransport<T, R, P> {
+    fn new(io: T, map: M) -> WaylandTransport<T, R, P, M> {
         WaylandTransport {
             inner: WaylandCodec::<R, P>::default().framed(io),
+            map,
         }
     }
 }
 
-impl<T, R, P> Stream for WaylandTransport<T, R, P> {
-    type Item = DispatchMessage;
+impl<T, R, P, M> Stream for WaylandTransport<T, R, P, M>
+where
+    T: AsyncRead + Unpin + DequeueFd,
+    M: MessageFdMap,
+{
+    type Item = Result<DispatchMessage, TransportError>;
 
-    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Option<Self::Item>> {
-        todo!()
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        use Poll::*;
+
+        let project = self.project();
+        let mut inner = project.inner;
+        let map = project.map;
+
+        match inner.as_mut().poll_next(cx) {
+            Pending => Pending,
+            Ready(None) => Ready(None),
+            Ready(Some(Err(e))) => Ready(Some(Err(e.into()))),
+
+            Ready(Some(Ok(msg))) => {
+                let fd = if map.message_has_fd(msg.object_id(), msg.opcode()) {
+                    let framed: &mut Framed<_, _> = &mut inner;
+                    match framed.get_mut().dequeue() {
+                        Some(fd) => Some(Fd(fd)),
+                        None => {
+                            return Ready(Some(Err(TransportError::missing_fd(
+                                msg.object_id(),
+                                msg.opcode(),
+                            ))))
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                Ready(Some(Ok(DispatchMessage::new(msg, fd))))
+            }
+        }
     }
 }
 
-impl<T,P, Item> Sink<Item> for WaylandTransport<T,ServerRole,P>
+impl<T,P, M, Item> Sink<Item> for WaylandTransport<T,ServerRole,P, M>
 where
     Item: Message,
     <<Item as Message>::MessageList as MessageList>::Interface : Interface<
@@ -78,7 +111,7 @@ where
 
     fn start_send(self: Pin<&mut Self>, msg: Item) -> Result<(), Self::Error> {
         let mut inner = self.project().inner;
-        let framed: &mut Framed<T, WaylandCodec<ServerRole, P>> = &mut inner;
+        let framed: &mut Framed<_, _> = &mut inner;
 
         msg.args().enqueue(framed.get_mut())?;
         Sink::<Item>::start_send(inner, msg).map_err(|e| e.into())
@@ -94,7 +127,7 @@ where
 
 }
 
-impl<T,P, Item> Sink<Item> for WaylandTransport<T,ClientRole,P>
+impl<T, P, M, Item> Sink<Item> for WaylandTransport<T,ClientRole,P, M>
 where
     Item: Message,
     <<Item as Message>::MessageList as MessageList>::Interface : Interface<
@@ -115,7 +148,7 @@ where
 
     fn start_send(self: Pin<&mut Self>, msg: Item) -> Result<(), Self::Error> {
         let mut inner = self.project().inner;
-        let framed: &mut Framed<T, WaylandCodec<ClientRole, P>> = &mut inner;
+        let framed: &mut Framed<_, _> = &mut inner;
 
         msg.args().enqueue(framed.get_mut())?;
         Sink::<Item>::start_send(inner, msg).map_err(|e| e.into())
@@ -133,7 +166,23 @@ where
 
 // === DispatchMessage ===
 
-pub struct DispatchMessage {}
+#[derive(Debug)]
+pub struct DispatchMessage {
+    inner: codec::DispatchMessage,
+    fd: Option<Fd>,
+}
+
+impl DispatchMessage {
+    fn new(inner: codec::DispatchMessage, fd: Option<Fd>) -> DispatchMessage {
+        DispatchMessage { inner, fd }
+    }
+}
+
+// === MessageFdMap ===
+
+pub trait MessageFdMap {
+    fn message_has_fd(&self, object: ObjectId, opcode: u16) -> bool;
+}
 
 // === TransportError ===
 
@@ -150,6 +199,15 @@ pub enum TransportError {
         #[from]
         source: QueueFullError,
     },
+
+    #[error("Expected file descriptor for opcode {opcode} on {object_id} missing")]
+    MissingFd { object_id: ObjectId, opcode: u16 },
+}
+
+impl TransportError {
+    fn missing_fd(object_id: ObjectId, opcode: u16) -> TransportError {
+        TransportError::MissingFd { object_id, opcode }
+    }
 }
 
 // === ArgEnqueueFd ===
@@ -245,8 +303,9 @@ mod tests {
     use std::io;
     use std::os::unix::io::{AsRawFd, RawFd};
 
+    use assert_matches::assert_matches;
     use futures::executor::block_on;
-    use futures::sink::SinkExt;
+    use futures::prelude::*;
     use futures_ringbuf::RingBuffer as AsyncRingBuffer;
     use ringbuf::{Consumer, Producer, RingBuffer};
 
@@ -323,7 +382,7 @@ mod tests {
         }
     }
 
-    impl AsyncRead for FakeEndpoint {
+    impl super::AsyncRead for FakeEndpoint {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -333,7 +392,7 @@ mod tests {
         }
     }
 
-    impl AsyncWrite for FakeEndpoint {
+    impl super::AsyncWrite for FakeEndpoint {
         fn poll_write(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
@@ -368,14 +427,43 @@ mod tests {
         }
     }
 
+    struct FakeMessageFdMap {
+        result: bool,
+    }
+
+    impl FakeMessageFdMap {
+        fn new(result: bool) -> FakeMessageFdMap {
+            FakeMessageFdMap { result }
+        }
+    }
+
+    impl MessageFdMap for FakeMessageFdMap {
+        fn message_has_fd(&self, _object: ObjectId, _opcode: u16) -> bool {
+            self.result
+        }
+    }
+
     #[test]
     fn transport_passes_fd() {
         let endpoint = FakeEndpoint::default();
         let message = FdEvent::new(ObjectId(2), Fd(4));
 
-        let mut sut = WaylandTransport::<_, ServerRole, Family>::new(endpoint);
+        let mut sut = WaylandTransport::<_, ServerRole, Family, _>::new(endpoint, ());
         block_on(sut.send(message)).expect("Unable to send message.");
 
         assert!(!sut.inner.get_ref().consumer.is_empty());
+    }
+
+    #[test]
+    fn transport_send_and_receives_fd() {
+        let endpoint = FakeEndpoint::default();
+        let message = FdEvent::new(ObjectId(2), Fd(4));
+        let map = FakeMessageFdMap::new(true);
+
+        let mut sut = WaylandTransport::<_, ServerRole, Family, _>::new(endpoint, map);
+        block_on(sut.send(message)).expect("Unable to send message.");
+        let result = block_on(sut.next());
+
+        assert_matches!(result, Some(Ok(DispatchMessage{ inner: _, fd: Some(_) })));
     }
 }

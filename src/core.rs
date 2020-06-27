@@ -60,6 +60,7 @@ pub struct Decimal(u32);
 ///
 /// This is a new-type warpper around a `RawFd`. We can't use `RawFd` directly
 /// because that is a type alais for `i32` which is already the int `Argument` type.
+#[derive(Debug)]
 pub struct Fd(RawFd);
 
 /// The signature for a [Wayland] message.
@@ -202,6 +203,14 @@ pub trait ProtocolFamily {
 impl AsRawFd for &Fd {
     fn as_raw_fd(&self) -> RawFd {
         self.0
+    }
+}
+
+// === impl ObjectId ===
+
+impl fmt::Display for ObjectId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "object {}", self.0)
     }
 }
 
