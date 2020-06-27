@@ -276,7 +276,7 @@ pub enum CodecError {
 
 // === ArgEncoder ===
 
-/// ArgEncoder is the low-level interface to encode the 7 argument types into the byte
+/// `ArgEncoder` is the low-level interface to encode the 7 argument types into the byte
 /// stream as a part of the Wayland wire protocol. ArgEncoder does not handle fd
 /// passing which will be dealt with at a higher level.
 pub trait ArgEncoder {
@@ -414,10 +414,10 @@ tuple_arg_encoder_impl! { A B C D E F G H I J K L }
 
 // === ArgDecoder ===
 
-/// ArgDecoder is the low-level interface to decode the 7 argument types from the
-/// byte stream as a part of the Wayland wire protocol. ArgDecoder does not handle fd
+/// `ArgDecoder` is the low-level interface to decode the 7 argument types from the
+/// byte stream as a part of the Wayland wire protocol. `ArgDecoder` does not handle fd
 /// passing which will be dealt with at a higher level (the return value from
-/// Fd::decode() is a fake value that should be replaced at the higher level).
+/// `Fd::decode()` is a fake value that should be replaced at the higher level).
 pub trait ArgDecoder: Sized {
     fn decode(src: &mut impl Buf) -> Result<Self, CodecError>;
 }
