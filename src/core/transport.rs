@@ -29,6 +29,39 @@ use super::{
 
 // === WaylandTransport ===
 
+/// `WaylandTransport` is the [Wayland] wire protocol including file descriptor
+/// passing.
+///
+/// The `Stream` and `Sink` implementations on `WaylandTransport` allow receiving and
+/// sending [Wayland] `Message`'s. They use a `WaylandCodec` for encoding and
+/// decoding the byte stream of the message and then layer file descriptor passing on
+/// top of that.
+///
+/// Sending a message through the `Sink` is done directly. That is, and implemention
+/// of `Message` is passed to `start_send()` directly and its wire protocol
+/// representation is sent accross the transport.
+///
+/// Receiving a message through the `Stream`, on the other hand, is a two-step
+/// process. The `Stream` receives a `DispatchMessage` which contians enough
+/// information to dispatch the message. Onc the message has been dispatched and its
+/// `Signature` is known, `DispatchMessage::extract_args()` will extract the
+/// arguments for that message (including any passed file descriptor).
+///
+/// `WaylandTransport` currently assumes that each [Wayland] message has at most 1
+/// file descriptor being passed.
+///
+/// `WaylandTransport` is paramaterized by a `Role` (server or client) and a
+/// `ProtocolFamily`. These are used at complile time to enforce encoding only
+/// messages for the `ProtocolFamily` and to enforce encoding only requests for
+/// clients and events for servers.
+///
+/// `WaylandTransport` is built on top of an underlying transport that implements
+/// `AsyncWrite`, `AsyncRead`, `EnqueueFd`, and `DequeueFd` (the latter two from the
+/// `fd-queue` crate). It also requires a `MessageFdMap` to identify which messages
+/// (based on their object id and opcode) are accompanided by file descriptor
+/// passing.
+///
+/// [Wayland]: https://wayland.freedesktop.org/
 #[pin_project]
 pub struct WaylandTransport<T, R, P, M> {
     #[pin]
@@ -167,6 +200,8 @@ where
 
 // === DispatchMessage ===
 
+/// `DispatchMessage` is phase 1 of recieving a `Message` through a
+/// `WaylandTransport` and allows for phase 2.
 #[derive(Debug)]
 pub struct DispatchMessage {
     inner: codec::DispatchMessage,
@@ -200,6 +235,10 @@ impl DispatchMessage {
 
 // === MessageFdMap ===
 
+/// An interface to a map that identifies if a `Message` passes a file descriptor.
+///
+/// This uses an `opcode` on a given object (identified by its `ObjectId`) to
+/// indeirectly identify an incoming `Message`.
 pub trait MessageFdMap {
     fn message_has_fd(&self, object: ObjectId, opcode: u16) -> bool;
 }
@@ -235,6 +274,9 @@ impl TransportError {
 
 // === ArgEnqueueFd ===
 
+/// `ArgEnqueueFd` is a low-level interface to enqueue a file descriptor for `Fd`
+/// arguments and do nothing for the other 6 arguments types in the Wayland wire
+/// protocol.
 pub trait ArgEnqueueFd {
     fn enqueue(&self, queue: &mut impl EnqueueFd) -> Result<(), TransportError>;
 }
@@ -321,6 +363,11 @@ tuple_arg_enqueue_fd_impl! { A B C D E F G H I J K L }
 
 // === ArgDequeueFd ===
 
+/// `ArgDequeueFd` is a low-level interface to layer receiving a passed file
+/// descriptor on top of the decoding of the 7 argument types in the Wayland
+/// protocol. Specifically it maps the fake value that is decoded for an `Fd` into
+/// the real file descriptor that was passed. All other argument types are identity
+/// mapped.
 pub trait ArgDequeueFd: Sized {
     fn map_fd(self, fd: &mut Option<Fd>) -> Result<Self, TransportError>;
 }
