@@ -38,7 +38,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
             command: fmt
-            args: --check
+            args: -- --check
 
       - name: Clippy
         if: matrix.rust == 'stable'
