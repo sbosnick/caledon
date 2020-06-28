@@ -589,15 +589,17 @@ mod tests {
 
     #[test]
     fn encode_message_gives_expected_bytes() {
+        let expected = if cfg!(target_endian = "little") {
+            [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00]
+        } else {
+            [0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00]
+        };
         let mut buffer = BytesMut::new();
 
         let mut sut = WaylandCodec::<ClientRole, Family>::default();
         sut.encode(DestroyRequest {}, &mut buffer).unwrap();
 
-        assert_eq!(
-            buffer,
-            &[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00,].as_ref()
-        );
+        assert_eq!(buffer, &expected.as_ref());
     }
 
     #[test]
@@ -629,22 +631,22 @@ mod tests {
 
     #[test]
     fn arg_encoder_encodes_u32() {
-        arg_encoder_encodes_value(1u32, &[0x01, 0x00, 0x00, 0x00]);
+        arg_encoder_encodes_value(1u32, &get_one_array());
     }
 
     #[test]
     fn arg_encoder_encodes_i32() {
-        arg_encoder_encodes_value(1i32, &[0x01, 0x00, 0x00, 0x00]);
+        arg_encoder_encodes_value(1i32, &get_one_array());
     }
 
     #[test]
     fn arg_encoder_encodes_decimal() {
-        arg_encoder_encodes_value(Decimal(1), &[0x01, 0x00, 0x00, 0x00]);
+        arg_encoder_encodes_value(Decimal(1), &get_one_array());
     }
 
     #[test]
     fn arg_encoder_encodes_object_id() {
-        arg_encoder_encodes_value(ObjectId(1), &[0x01, 0x00, 0x00, 0x00]);
+        arg_encoder_encodes_value(ObjectId(1), &get_one_array());
     }
 
     #[test]
@@ -659,9 +661,11 @@ mod tests {
 
     #[test]
     fn arg_encoder_encodes_cstring() {
-        let expected = &[
-            0x06, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00, 0x00, 0x00,
-        ];
+        let expected = if cfg!(target_endian = "little") {
+            &[6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0]
+        } else {
+            &[0, 0, 0, 6, b'h', b'e', b'l', b'l', b'o', 0, 0, 0]
+        };
 
         let sut = CString::new("hello").expect("bad CString");
 
@@ -670,9 +674,11 @@ mod tests {
 
     #[test]
     fn arg_encoder_encodes_box_u8_slice() {
-        let expected = &[
-            0x05, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00, 0x00, 0x00,
-        ];
+        let expected = if cfg!(target_endian = "little") {
+            &[5, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0]
+        } else {
+            &[0, 0, 0, 5, b'h', b'e', b'l', b'l', b'o', 0, 0, 0]
+        };
         let vec = vec![b'h', b'e', b'l', b'l', b'o'];
 
         let sut = vec.into_boxed_slice();
@@ -682,10 +688,15 @@ mod tests {
 
     #[test]
     fn tuple_u8_cstring_encodes_expected_value() {
-        let expected = &[
-            0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o', 0x00,
-            0x00, 0x00,
-        ];
+        let expected = if cfg!(target_endian = "little") {
+            &[
+                1, 0, 0, 0, 6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0,
+            ]
+        } else {
+            &[
+                0, 0, 0, 1, 0, 0, 0, 6, b'h', b'e', b'l', b'l', b'o', 0, 0, 0,
+            ]
+        };
         let hello = CString::new("hello").expect("bad CString");
 
         let sut = (1u32, hello);
@@ -703,27 +714,27 @@ mod tests {
 
     #[test]
     fn arg_decoder_decodes_u32() {
-        arg_decoder_decodes_value(&[1, 0, 0, 0], 1u32);
+        arg_decoder_decodes_value(&get_one_array(), 1u32);
     }
 
     #[test]
     fn arg_decoder_decodes_i32() {
-        arg_decoder_decodes_value(&[1, 0, 0, 0], 1i32);
+        arg_decoder_decodes_value(&get_one_array(), 1i32);
     }
 
     #[test]
     fn arg_decoder_decodes_decemial() {
-        arg_decoder_decodes_value(&[1, 0, 0, 0], Decimal(1));
+        arg_decoder_decodes_value(&get_one_array(), Decimal(1));
     }
 
     #[test]
     fn arg_decoder_decodes_object_id() {
-        arg_decoder_decodes_value(&[1, 0, 0, 0], ObjectId(1));
+        arg_decoder_decodes_value(&get_one_array(), ObjectId(1));
     }
 
     #[test]
     fn arg_decoder_uses_no_bytes_for_fd() {
-        let array = &[1u8, 0, 0, 0];
+        let array = &get_one_array();
         let mut buf = array.as_ref();
 
         Fd::decode(&mut buf).expect("Unexpected error in decode()");
@@ -731,9 +742,33 @@ mod tests {
         assert_eq!(buf.len(), 4);
     }
 
+    #[cfg(target_endian = "little")]
+    fn get_one_array() -> [u8; 4] {
+        [1, 0, 0, 0]
+    }
+
+    #[cfg(target_endian = "big")]
+    fn get_one_array() -> [u8; 4] {
+        [0, 0, 0, 1]
+    }
+
+    #[cfg(target_endian = "little")]
+    fn get_two_array() -> [u8; 4] {
+        [2, 0, 0, 0]
+    }
+
+    #[cfg(target_endian = "big")]
+    fn get_two_array() -> [u8; 4] {
+        [0, 0, 0, 2]
+    }
+
     #[test]
     fn arg_decoder_decodes_cstring() {
-        let array = &[6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0];
+        let array = if cfg!(target_endian = "little") {
+            &[6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0]
+        } else {
+            &[0, 0, 0, 6, b'h', b'e', b'l', b'l', b'o', 0, 0, 0]
+        };
         let mut buf = array.as_ref();
 
         let result = CString::decode(&mut buf);
@@ -746,7 +781,11 @@ mod tests {
     #[test]
     fn arg_decoder_invalid_cstring_is_error() {
         // array has a nul byte in the middle of the CString portion
-        let array = &[6, 0, 0, 0, b'h', b'e', b'l', 0, b'o', 0, 0, 0];
+        let array = if cfg!(target_endian = "little") {
+            &[6, 0, 0, 0, b'h', b'e', b'l', 0, b'o', 0, 0, 0]
+        } else {
+            &[0, 0, 0, 6, b'h', b'e', b'l', 0, b'o', 0, 0, 0]
+        };
         let mut buf = array.as_ref();
 
         let result = CString::decode(&mut buf);
@@ -756,7 +795,11 @@ mod tests {
 
     #[test]
     fn arg_decoder_decodes_array() {
-        let array = &[5, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0];
+        let array = if cfg!(target_endian = "little") {
+            &[5, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0]
+        } else {
+            &[0, 0, 0, 5, b'h', b'e', b'l', b'l', b'o', 0, 0, 0]
+        };
         let mut buf = array.as_ref();
         let expected = vec![b'h', b'e', b'l', b'l', b'o'];
 
@@ -769,9 +812,15 @@ mod tests {
 
     #[test]
     fn tuple_u8_cstring_decodes_from_bytes() {
-        let buf = &[
-            1, 0, 0, 0, 6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0,
-        ];
+        let buf = if cfg!(target_endian = "little") {
+            &[
+                1, 0, 0, 0, 6, 0, 0, 0, b'h', b'e', b'l', b'l', b'o', 0, 0, 0,
+            ]
+        } else {
+            &[
+                0, 0, 0, 1, 0, 0, 0, 6, b'h', b'e', b'l', b'l', b'o', 0, 0, 0,
+            ]
+        };
         let string = CString::new("hello").expect("bad CString");
 
         arg_decoder_decodes_value(buf, (1u32, string));
@@ -808,7 +857,12 @@ mod tests {
 
     #[test]
     fn decode_header_without_args_gives_expected_result() {
-        let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 8, 0].as_ref().into();
+        let array = if cfg!(target_endian = "little") {
+            [1u8, 0, 0, 0, 0, 0, 8, 0]
+        } else {
+            [0u8, 0, 0, 1, 0, 8, 0, 0]
+        };
+        let mut buf: BytesMut = array.as_ref().into();
 
         let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let result = sut.decode(&mut buf);
@@ -822,7 +876,12 @@ mod tests {
 
     #[test]
     fn decode_header_without_expected_args_wants_more() {
-        let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0].as_ref().into();
+        let array = if cfg!(target_endian = "little") {
+            [1u8, 0, 0, 0, 0, 0, 12, 0]
+        } else {
+            [0u8, 0, 0, 1, 0, 12, 0, 0]
+        };
+        let mut buf: BytesMut = array.as_ref().into();
 
         let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let result = sut.decode(&mut buf);
@@ -832,7 +891,12 @@ mod tests {
 
     #[test]
     fn decode_header_with_args_gives_expected_result() {
-        let mut buf: BytesMut = [1u8, 0, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0].as_ref().into();
+        let array = if cfg!(target_endian = "little") {
+            [1u8, 0, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0]
+        } else {
+            [0u8, 0, 0, 1, 0, 12, 0, 0, 0, 0, 0, 2]
+        };
+        let mut buf: BytesMut = array.as_ref().into();
 
         let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let result = sut.decode(&mut buf);
@@ -841,17 +905,22 @@ mod tests {
             assert_eq!(msg.object_id, ObjectId(1));
             assert_eq!(msg.opcode(), 0);
             assert_eq!(msg.args.len(), 4);
-            assert_eq!(msg.args, [2, 0, 0, 0].as_ref());
+            assert_eq!(msg.args, get_two_array().as_ref());
         });
     }
 
     #[test]
     fn decode_two_messages_gives_expected_result() {
-        let mut buf: BytesMut = [
-            1u8, 0, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 0,
-        ]
-        .as_ref()
-        .into();
+        let array = if cfg!(target_endian = "little") {
+            [
+                1u8, 0, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 0,
+            ]
+        } else {
+            [
+                0u8, 0, 0, 1, 0, 12, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 8, 0, 1,
+            ]
+        };
+        let mut buf: BytesMut = array.as_ref().into();
 
         let mut sut = WaylandCodec::<ServerRole, Family>::default();
         let _ = sut.decode(&mut buf);

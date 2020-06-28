@@ -51,3 +51,26 @@ jobs:
         with:
           command: test
 
+  # Test with at least one big endian target
+  cross:
+      name: Test Cross Compiled
+      runs-on: ubuntu-latest
+
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v1
+
+        - name: Install Rust Stable
+          uses: actions-rs/toolchain@v1
+          with:
+              profile: minimal
+              toolchain: stable
+              target: powerpc64-unknown-linux-gnu
+              override: true
+
+        - name: Test
+          uses: actions-rs/cargo@v1
+          with:
+              command: test
+              use-cross: true
+              args: --target powerpc64-unknown-linux-gnu
