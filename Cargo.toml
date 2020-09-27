@@ -25,3 +25,8 @@ assert_matches = "1.3.0"
 futures = "0.3.5"
 futures_ringbuf = {version = "0.2.1", features = ["tokio"], default-features = false}
 ringbuf = "0.2.1"
+
+[build-dependencies]
+caledon-build = { path = "caledon-build" }
+
+[workspace]
