@@ -12,7 +12,7 @@ keywords = ["wayland", "protocol"]
 
 [dependencies]
 bytes = "0.5.4"
-fd-queue = { git = "https://github.com/sbosnick/fd-queue" }
+fd-queue = "1.0.0-beta.2"
 futures-core = "0.3.5"
 futures-sink = "0.3.5"
 pin-project = "0.4.22"
