@@ -12,3 +12,5 @@
 //! [Wayland]: https://wayland.freedesktop.org/
 
 #![deny(missing_docs, warnings)]
+
+mod model;
