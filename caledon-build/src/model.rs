@@ -9,7 +9,7 @@
 use serde::Deserialize;
 
 // The DTD fragments in the comments of this file are (when taken all together)
-// are the "wayland.dtd" file from the protocol directory of the Wayland repository
+// the "wayland.dtd" file from the protocol directory of the Wayland repository
 // (at least as of September 2020). The struct's and enum's that follow the DTD fragment
 // are a loose attempt to parse that portion of a Wayland protocol file through the
 // serde Deserialize derivations and the serde_xml_rs crate. The goal is to recognize
