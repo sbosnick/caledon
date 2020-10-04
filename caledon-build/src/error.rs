@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{path::PathBuf, io, borrow::Cow, path::Path};
+use std::{borrow::Cow, io, path::Path, path::PathBuf};
 
 pub use thiserror::Error;
 
@@ -44,12 +44,10 @@ impl Error {
     }
 
     pub(crate) fn parse_xml_file(path: Cow<Path>, source: serde_xml_rs::Error) -> Error {
-        Error::ParseXmlFile (
-            ParseXmlFile {
-                file: path.into_owned(),
-                source,
-            }
-        )
+        Error::ParseXmlFile(ParseXmlFile {
+            file: path.into_owned(),
+            source,
+        })
     }
 }
 

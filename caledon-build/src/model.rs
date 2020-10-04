@@ -6,12 +6,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{path::Path, fs::File, io::BufReader};
+use std::{fs::File, io::BufReader, path::Path};
 
 use serde::Deserialize;
 use serde_xml_rs::from_reader;
 
-use crate::{Result, Error};
+use crate::{Error, Result};
 
 // The DTD fragments in the comments of this file are (when taken all together)
 // the "wayland.dtd" file from the protocol directory of the Wayland repository
@@ -219,12 +219,14 @@ mod tests {
     fn event_fd_has_fd_arg() {
         let protocol = from_str::<Protocol>(TEST_XML_PROTOCOL).unwrap();
         let items = &protocol.interfaces[0].items;
-        let event = items.iter().filter_map(|item| match item {
-            InterfaceItem::Event(event) if event.name == "fd" => Some(event),
-            _ => None,
-        })
-        .nth(0)
-        .expect("Can't find event \"fd\"");
+        let event = items
+            .iter()
+            .filter_map(|item| match item {
+                InterfaceItem::Event(event) if event.name == "fd" => Some(event),
+                _ => None,
+            })
+            .nth(0)
+            .expect("Can't find event \"fd\"");
 
         let arg = &event.args.as_ref().unwrap()[0];
 
