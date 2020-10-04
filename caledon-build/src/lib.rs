@@ -14,6 +14,8 @@
 #![deny(missing_docs, warnings)]
 
 mod error;
+mod generator;
 mod model;
 
 pub use error::{Error, Result};
+pub use generator::{generate, Generator};
