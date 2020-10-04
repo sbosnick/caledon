@@ -6,7 +6,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::{path::Path, fs::File, io::BufReader};
+
 use serde::Deserialize;
+use serde_xml_rs::from_reader;
+
+use crate::{Result, Error};
 
 // The DTD fragments in the comments of this file are (when taken all together)
 // the "wayland.dtd" file from the protocol directory of the Wayland repository
@@ -146,8 +151,21 @@ pub struct Description {
     body: Option<String>,
 }
 
+// === impl Protocol ===
+impl Protocol {
+    // TODO: remove this when no longer needed
+    #[allow(dead_code)]
+    pub fn new(path: impl AsRef<Path>) -> Result<Protocol> {
+        let path = path.as_ref();
+        let file = File::open(path).map_err(|e| Error::file_open(path.into(), e))?;
+        from_reader(BufReader::new(file)).map_err(|e| Error::parse_xml_file(path.into(), e))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
 
     use serde_xml_rs::from_str;
@@ -211,6 +229,20 @@ mod tests {
         let arg = &event.args.as_ref().unwrap()[0];
 
         assert_eq!(arg.name, "fd");
+    }
+
+    #[test]
+    fn protocol_new_parses_xml_file() {
+        let path = get_test_file("tests.xml");
+
+        Protocol::new(path).expect("Unable to parse test.xml file.");
+    }
+
+    fn get_test_file(test_file: &str) -> PathBuf {
+        let mut path = PathBuf::from("test_data");
+        path.push(test_file);
+
+        path
     }
 
     // This is the tests.xml file from the Wayland repository protocol directory.

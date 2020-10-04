@@ -14,3 +14,7 @@
 #![deny(missing_docs, warnings)]
 
 mod model;
+mod error;
+
+pub use error::{ Error, Result };
+
