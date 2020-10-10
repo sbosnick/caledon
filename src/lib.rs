@@ -17,3 +17,10 @@
 #![deny(missing_docs, warnings)]
 
 pub mod core;
+
+/// The generated types for the [Wayland] protocol XML files.
+///
+/// [Wayland]: https://wayland.freedesktop.org/
+pub mod protocols {
+    include!(concat!(env!("OUT_DIR"), "/protocols.rs"));
+}
