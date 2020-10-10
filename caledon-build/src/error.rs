@@ -85,7 +85,7 @@ impl Error {
     }
 
     pub(crate) fn file_create(path: Cow<Path>, source: io::Error) -> Error {
-        Error::FileCreate{
+        Error::FileCreate {
             file: path.into_owned(),
             source,
         }

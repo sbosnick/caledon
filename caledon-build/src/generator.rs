@@ -6,11 +6,21 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{path::{Path, PathBuf}, env, io::Write, fs::File, io::BufWriter, fs, io, ffi::OsStr, ffi::OsString};
+use std::{
+    env,
+    ffi::OsStr,
+    ffi::OsString,
+    fs,
+    fs::File,
+    io,
+    io::BufWriter,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use itertools::Itertools;
 
-use crate::{Result, Error, model::Protocol};
+use crate::{model::Protocol, Error, Result};
 
 /// A builder to configure the process of generating the `caledon` types to represent
 /// [Wayland] protocol XML files.
@@ -35,7 +45,7 @@ impl Generator {
     pub fn new(protocol_directory: impl AsRef<Path>) -> Self {
         Generator {
             directory: Some(protocol_directory.as_ref().to_owned()),
-            .. Generator::default()
+            ..Generator::default()
         }
     }
 
@@ -66,7 +76,8 @@ impl Generator {
     /// [Wayland]: https://wayland.freedesktop.org/
     pub fn generate(&self) -> Result<()> {
         let _file = self.get_out_file()?;
-        let _protocols: Vec<_> = self.get_directory()?
+        let _protocols: Vec<_> = self
+            .get_directory()?
             .filter_map(dir_entry_to_protocol)
             .try_collect()?;
 
@@ -74,11 +85,11 @@ impl Generator {
     }
 
     fn get_directory(&self) -> Result<fs::ReadDir> {
-       get_directory(&self.directory, |k| env::var_os(k))
+        get_directory(&self.directory, |k| env::var_os(k))
     }
 
     fn get_out_file(&self) -> Result<impl Write> {
-       get_out_file(&self.out_file, |k| env::var_os(k))
+        get_out_file(&self.out_file, |k| env::var_os(k))
     }
 }
 
@@ -117,51 +128,58 @@ fn dir_entry_to_protocol(entry: io::Result<fs::DirEntry>) -> Option<Result<Proto
 fn is_xml_file(entry: &fs::DirEntry) -> bool {
     entry.file_type().map_or(false, |ft| ft.is_file())
         && match entry.path().extension() {
-            Some(ext) => ext.to_str().map_or(false, |ext| "xml".eq_ignore_ascii_case(ext)),
+            Some(ext) => ext
+                .to_str()
+                .map_or(false, |ext| "xml".eq_ignore_ascii_case(ext)),
             None => false,
         }
 }
 
 fn get_out_file<G>(path: &Option<PathBuf>, var_os: G) -> Result<impl Write>
 where
-    G: Fn(&OsStr) -> Option<OsString>
+    G: Fn(&OsStr) -> Option<OsString>,
 {
-    convert_or_default(path, "OUT_DIR", "protocols.rs", create_file, var_os)
-        .map(BufWriter::new)
+    convert_or_default(path, "OUT_DIR", "protocols.rs", create_file, var_os).map(BufWriter::new)
 }
 
 fn create_file(path: &Path) -> Result<File> {
-    File::create(path)
-        .map_err(|e| Error::file_create(path.into(), e))
+    File::create(path).map_err(|e| Error::file_create(path.into(), e))
 }
 
 fn get_directory<G>(path: &Option<PathBuf>, var_os: G) -> Result<fs::ReadDir>
 where
-    G: Fn(&OsStr) -> Option<OsString>
+    G: Fn(&OsStr) -> Option<OsString>,
 {
     convert_or_default(path, "CARGO_MANIFEST_DIR", "protocols", read_dir, var_os)
 }
 
 fn read_dir(path: &Path) -> Result<fs::ReadDir> {
-    fs::read_dir(path)
-        .map_err(|e| Error::read_dir(path.into(), e))
+    fs::read_dir(path).map_err(|e| Error::read_dir(path.into(), e))
 }
 
-fn convert_or_default<K, P, F, R, G>(path: &Option<PathBuf>, key: K, suffix: P, f: F, var_os: G) -> Result<R>
+fn convert_or_default<K, P, F, R, G>(
+    path: &Option<PathBuf>,
+    key: K,
+    suffix: P,
+    f: F,
+    var_os: G,
+) -> Result<R>
 where
     K: AsRef<OsStr>,
     P: AsRef<Path>,
     F: Fn(&Path) -> Result<R>,
-    G: Fn(&OsStr) -> Option<OsString>
+    G: Fn(&OsStr) -> Option<OsString>,
 {
     let key = key.as_ref();
 
     path.as_ref().map_or_else(
-        || var_os(key).map_or_else(
+        || {
+            var_os(key).map_or_else(
                 || Err(Error::NoEnvVar(key.to_string_lossy().into_owned())),
-                |s| f(&Path::new(&s).join(suffix))
-            ),
-        |p| f(&p)
+                |s| f(&Path::new(&s).join(suffix)),
+            )
+        },
+        |p| f(&p),
     )
 }
 
@@ -249,7 +267,8 @@ mod tests {
         write!(file, "{}", text).expect("Can't write to out file.");
         drop(file);
 
-        let contents = fs::read_to_string(dir.path().join("protocols.rs")).expect("Can't read contents.");
+        let contents =
+            fs::read_to_string(dir.path().join("protocols.rs")).expect("Can't read contents.");
         assert_eq!(contents, text);
         assert_eq!(*state.borrow(), Some(OsString::from("OUT_DIR")));
     }
@@ -279,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    fn get_directory_gets_from_expected_env_var_without_config(){
+    fn get_directory_gets_from_expected_env_var_without_config() {
         let _ = get_directory(&None, |k| {
             assert_eq!(k, OsStr::new("CARGO_MANIFEST_DIR"));
             None
@@ -291,8 +310,7 @@ mod tests {
         let dir = tempdir().expect("Can't get temporary directory.");
         let path = dir.path().join("protocols");
         fs::create_dir(&path).expect("Can't create directory.");
-        fs::write(path.join("myfile.txt"), "Hi there!")
-            .expect("Can't write to to temporary file.");
+        fs::write(path.join("myfile.txt"), "Hi there!").expect("Can't write to to temporary file.");
 
         let dirs: Vec<_> = get_directory(&None, |_| Some(dir.path().as_os_str().to_os_string()))
             .expect("Can't get directory")
@@ -346,7 +364,7 @@ mod tests {
         let result = dir_entry_to_protocol(entry);
 
         assert!(result.is_none());
-   }
+    }
 
     fn get_test_file(test_file: &str) -> PathBuf {
         let mut path = PathBuf::from("test_data");
