@@ -153,8 +153,6 @@ pub struct Description {
 
 // === impl Protocol ===
 impl Protocol {
-    // TODO: remove this when no longer needed
-    #[allow(dead_code)]
     pub fn new(path: impl AsRef<Path>) -> Result<Protocol> {
         let path = path.as_ref();
         let file = File::open(path).map_err(|e| Error::file_open(path.into(), e))?;
