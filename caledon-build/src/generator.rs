@@ -84,11 +84,23 @@ impl Generator {
 
         generate_code(file, protocols.iter())?;
 
+        for protocol in protocols.iter() {
+            println!("cargo:rerun-if-changed={}", protocol.path().display());
+        }
+
+        let path = self.get_directory_path()?;
+        println!("cargo:rerun-if-changed={}", path.display());
+
+
         self.run_rustfmt()
     }
 
     fn get_directory(&self) -> Result<fs::ReadDir> {
         get_directory(&self.directory, |k| env::var_os(k))
+    }
+
+    fn get_directory_path(&self) -> Result<PathBuf> {
+        get_directory_path(&self.directory, |k| env::var_os(k))
     }
 
     fn get_out_file(&self) -> Result<impl Write> {
@@ -184,6 +196,13 @@ where
     G: Fn(&OsStr) -> Option<OsString>,
 {
     convert_or_default(path, "CARGO_MANIFEST_DIR", "protocols", read_dir, var_os)
+}
+
+fn get_directory_path<G>(path: &Option<PathBuf>, var_os: G) -> Result<PathBuf>
+where
+    G: Fn(&OsStr) -> Option<OsString>,
+{
+    convert_or_default(path, "CARGO_MANIFEST_DIR", "protocols", to_pathbuf, var_os)
 }
 
 fn read_dir(path: &Path) -> Result<fs::ReadDir> {

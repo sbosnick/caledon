@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{fs::File, io::BufReader, path::Path};
+use std::{fs::File, io::BufReader, path::Path, path::PathBuf};
 
 use serde::Deserialize;
 use serde_xml_rs::from_reader;
@@ -25,6 +25,9 @@ use crate::{Error, Result};
 //   <!ATTLIST protocol name CDATA #REQUIRED>
 #[derive(Debug, Deserialize)]
 pub struct Protocol {
+    #[serde(skip)]
+    path: PathBuf,
+
     name: String,
     copyright: Option<Copyright>,
     description: Option<Description>,
@@ -156,7 +159,16 @@ impl Protocol {
     pub fn new(path: impl AsRef<Path>) -> Result<Protocol> {
         let path = path.as_ref();
         let file = File::open(path).map_err(|e| Error::file_open(path.into(), e))?;
-        from_reader(BufReader::new(file)).map_err(|e| Error::parse_xml_file(path.into(), e))
+        from_reader(BufReader::new(file))
+            .map(|mut p: Protocol| {
+                p.path = path.to_path_buf();
+                p
+            })
+            .map_err(|e| Error::parse_xml_file(path.into(), e))
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
 
