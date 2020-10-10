@@ -33,6 +33,13 @@ pub enum Error {
         source: io::Error,
     },
 
+    /// Error when writing to the output file.
+    #[error("Unable to write to the output file.")]
+    FileWrite {
+        /// The underlying source of the error.
+        source: io::Error,
+    },
+
     /// Error reading a directory.
     #[error("Unable to read the directory {dir}")]
     ReadDir {
@@ -60,6 +67,23 @@ pub enum Error {
     /// file.
     #[error("Expected environment variable {0} not set")]
     NoEnvVar(String),
+
+    /// Error when attempting to spawn rustfmt.
+    #[error("Unable to spawn rustfmt for file {file}")]
+    SpawnRustFmt {
+        /// The file on which we were trying to run rustfmt.
+        file: PathBuf,
+
+        /// The underlying source of the error.
+        source: io::Error,
+    },
+
+    /// Error when rustfmt did not exit successfully.
+    #[error("rustfmt exited unsucessfuly for file {file}")]
+    RunRustFmt {
+        /// The file on wich we were trying to run rustfmt.
+        file: PathBuf,
+    },
 }
 
 #[derive(Error, Debug)]
@@ -91,6 +115,10 @@ impl Error {
         }
     }
 
+    pub(crate) fn file_write(source: io::Error) -> Error {
+        Error::FileWrite { source }
+    }
+
     pub(crate) fn read_dir(path: Cow<Path>, source: io::Error) -> Error {
         Error::ReadDir {
             dir: path.into_owned(),
@@ -100,6 +128,19 @@ impl Error {
 
     pub(crate) fn read_dir_entry(source: io::Error) -> Error {
         Error::ReadDirEntry { source }
+    }
+
+    pub(crate) fn spawn_rustfmt(path: Cow<Path>, source: io::Error) -> Error {
+        Error::SpawnRustFmt {
+            file: path.into_owned(),
+            source,
+        }
+    }
+
+    pub(crate) fn run_rustfmt(path: Cow<Path>) -> Error {
+        Error::RunRustFmt {
+            file: path.into_owned(),
+        }
     }
 }
 

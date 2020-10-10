@@ -16,11 +16,12 @@ use std::{
     io::BufWriter,
     io::Write,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use itertools::Itertools;
 
-use crate::{model::Protocol, Error, Result};
+use crate::{codegen::generate_code, model::Protocol, Error, Result};
 
 /// A builder to configure the process of generating the `caledon` types to represent
 /// [Wayland] protocol XML files.
@@ -75,13 +76,15 @@ impl Generator {
     ///
     /// [Wayland]: https://wayland.freedesktop.org/
     pub fn generate(&self) -> Result<()> {
-        let _file = self.get_out_file()?;
-        let _protocols: Vec<_> = self
+        let file = self.get_out_file()?;
+        let protocols: Vec<_> = self
             .get_directory()?
             .filter_map(dir_entry_to_protocol)
             .try_collect()?;
 
-        todo!()
+        generate_code(file, protocols.iter())?;
+
+        self.run_rustfmt()
     }
 
     fn get_directory(&self) -> Result<fs::ReadDir> {
@@ -90,6 +93,13 @@ impl Generator {
 
     fn get_out_file(&self) -> Result<impl Write> {
         get_out_file(&self.out_file, |k| env::var_os(k))
+    }
+
+    fn run_rustfmt(&self) -> Result<()> {
+        if !self.disable_rustfmt {
+            run_rustfmt(&self.out_file, |k| env::var_os(k))?;
+        }
+        Ok(())
     }
 }
 
@@ -144,6 +154,29 @@ where
 
 fn create_file(path: &Path) -> Result<File> {
     File::create(path).map_err(|e| Error::file_create(path.into(), e))
+}
+
+fn run_rustfmt<G>(path: &Option<PathBuf>, var_os: G) -> Result<()>
+where
+    G: Fn(&OsStr) -> Option<OsString>,
+{
+    let path = convert_or_default(path, "OUT_DIR", "protocols.rs", to_pathbuf, var_os)?;
+
+    Command::new("rustfmt")
+        .arg(&path)
+        .status()
+        .map_err(|source| Error::spawn_rustfmt((&path).into(), source))
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(Error::run_rustfmt(path.into()))
+            }
+        })
+}
+
+fn to_pathbuf(path: &Path) -> Result<PathBuf> {
+    Ok(path.to_path_buf())
 }
 
 fn get_directory<G>(path: &Option<PathBuf>, var_os: G) -> Result<fs::ReadDir>
