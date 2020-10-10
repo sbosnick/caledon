@@ -98,8 +98,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn read_dir_entry(_source: io::Error) -> Error {
-        todo!()
+    pub(crate) fn read_dir_entry(source: io::Error) -> Error {
+        Error::ReadDirEntry { source }
     }
 }
 
