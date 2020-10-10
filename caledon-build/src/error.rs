@@ -23,9 +23,43 @@ pub enum Error {
         source: io::Error,
     },
 
+    /// Error creating a file for output.
+    #[error("Unable to create file {file}")]
+    FileCreate {
+        /// The file name the could not be created.
+        file: PathBuf,
+
+        /// The underlying source of the error.
+        source: io::Error,
+    },
+
+    /// Error reading a directory.
+    #[error("Unable to read the directory {dir}")]
+    ReadDir {
+        /// The directory that could not be read.
+        dir: PathBuf,
+
+        /// The underlying source of the error.
+        source: io::Error,
+    },
+
+    /// Error reading a directory entry.
+    #[error("Unable to read an entry of a directory")]
+    ReadDirEntry {
+        /// The underlying source of the error.
+        source: io::Error,
+    },
+
     /// Error attempting to parse a Wayland protocol XML file.
     #[error(transparent)]
     ParseXmlFile(ParseXmlFile),
+
+    /// Error retrieving an expected environment variable.
+    ///
+    /// This is usually related to not running as a part of a `build.rs`
+    /// file.
+    #[error("Expected environment variable {0} not set")]
+    NoEnvVar(String),
 }
 
 #[derive(Error, Debug)]
@@ -48,6 +82,24 @@ impl Error {
             file: path.into_owned(),
             source,
         })
+    }
+
+    pub(crate) fn file_create(path: Cow<Path>, source: io::Error) -> Error {
+        Error::FileCreate{
+            file: path.into_owned(),
+            source,
+        }
+    }
+
+    pub(crate) fn read_dir(path: Cow<Path>, source: io::Error) -> Error {
+        Error::ReadDir {
+            dir: path.into_owned(),
+            source,
+        }
+    }
+
+    pub(crate) fn read_dir_entry(_source: io::Error) -> Error {
+        todo!()
     }
 }
 

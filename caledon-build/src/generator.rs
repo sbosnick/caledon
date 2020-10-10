@@ -6,9 +6,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::path::{Path, PathBuf};
+use std::{path::{Path, PathBuf}, env, io::Write, fs::File, io::BufWriter, fs, io, ffi::OsStr, ffi::OsString};
 
-use crate::Result;
+use itertools::Itertools;
+
+use crate::{Result, Error, model::Protocol};
 
 /// A builder to configure the process of generating the `caledon` types to represent
 /// [Wayland] protocol XML files.
@@ -63,7 +65,20 @@ impl Generator {
     ///
     /// [Wayland]: https://wayland.freedesktop.org/
     pub fn generate(&self) -> Result<()> {
+        let _file = self.get_out_file()?;
+        let _protocols: Vec<_> = self.get_directory()?
+            .filter_map(dir_entry_to_protocol)
+            .try_collect()?;
+
         todo!()
+    }
+
+    fn get_directory(&self) -> Result<fs::ReadDir> {
+       get_directory(&self.directory, |k| env::var_os(k))
+    }
+
+    fn get_out_file(&self) -> Result<impl Write> {
+       get_out_file(&self.out_file, |k| env::var_os(k))
     }
 }
 
@@ -91,11 +106,73 @@ pub fn generate() -> Result<()> {
     Generator::default().generate()
 }
 
+fn dir_entry_to_protocol(entry: io::Result<fs::DirEntry>) -> Option<Result<Protocol>> {
+    match entry {
+        Ok(entry) if is_xml_file(&entry) => Some(Protocol::new(entry.path())),
+        Ok(_) => None,
+        Err(e) => Some(Err(Error::read_dir_entry(e))),
+    }
+}
+
+fn is_xml_file(entry: &fs::DirEntry) -> bool {
+    entry.file_type().map_or(false, |ft| ft.is_file())
+        && match entry.path().extension() {
+            Some(ext) => ext.to_str().map_or(false, |ext| "xml".eq_ignore_ascii_case(ext)),
+            None => false,
+        }
+}
+
+fn get_out_file<G>(path: &Option<PathBuf>, var_os: G) -> Result<impl Write>
+where
+    G: Fn(&OsStr) -> Option<OsString>
+{
+    convert_or_default(path, "OUT_DIR", "protocols.rs", create_file, var_os)
+        .map(BufWriter::new)
+}
+
+fn create_file(path: &Path) -> Result<File> {
+    File::create(path)
+        .map_err(|e| Error::file_create(path.into(), e))
+}
+
+fn get_directory<G>(path: &Option<PathBuf>, var_os: G) -> Result<fs::ReadDir>
+where
+    G: Fn(&OsStr) -> Option<OsString>
+{
+    convert_or_default(path, "CARGO_MANIFEST_DIR", "protocols", read_dir, var_os)
+}
+
+fn read_dir(path: &Path) -> Result<fs::ReadDir> {
+    fs::read_dir(path)
+        .map_err(|e| Error::read_dir(path.into(), e))
+}
+
+fn convert_or_default<K, P, F, R, G>(path: &Option<PathBuf>, key: K, suffix: P, f: F, var_os: G) -> Result<R>
+where
+    K: AsRef<OsStr>,
+    P: AsRef<Path>,
+    F: Fn(&Path) -> Result<R>,
+    G: Fn(&OsStr) -> Option<OsString>
+{
+    let key = key.as_ref();
+
+    path.as_ref().map_or_else(
+        || var_os(key).map_or_else(
+                || Err(Error::NoEnvVar(key.to_string_lossy().into_owned())),
+                |s| f(&Path::new(&s).join(suffix))
+            ),
+        |p| f(&p)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use std::{cell::RefCell, sync::Arc};
+
     use assert_matches::assert_matches;
+    use tempfile::tempdir;
 
     #[test]
     fn generator_new_sets_directory() {
@@ -139,5 +216,142 @@ mod tests {
         sut.disable_rustfmt();
 
         assert!(sut.disable_rustfmt);
+    }
+
+    #[test]
+    fn generator_get_out_file_get_configured_file() {
+        let dir = tempdir().expect("Can't get temporary directory.");
+        let path = dir.path().join("myfile.txt");
+        let text = "Hi there!";
+
+        let mut sut = Generator::default();
+        sut.out_file(&path);
+        let mut file = sut.get_out_file().expect("Can't get out file.");
+        write!(file, "{}", text).expect("Can't write to out file.");
+        drop(file);
+
+        let contents = fs::read_to_string(path).expect("Can't read contents.");
+        assert_eq!(contents, text);
+    }
+
+    #[test]
+    fn get_out_file_gets_from_out_dir() {
+        let dir = tempdir().expect("Can't get temporary directory.");
+        let state: Arc<RefCell<Option<OsString>>> = Default::default();
+        let state_clone = state.clone();
+        let var_os = |k: &OsStr| {
+            *state_clone.borrow_mut() = Some(k.to_os_string());
+            Some(dir.path().as_os_str().to_os_string())
+        };
+        let text = "Hi there!";
+
+        let mut file = get_out_file(&None, var_os).expect("Can't get out file.");
+        write!(file, "{}", text).expect("Can't write to out file.");
+        drop(file);
+
+        let contents = fs::read_to_string(dir.path().join("protocols.rs")).expect("Can't read contents.");
+        assert_eq!(contents, text);
+        assert_eq!(*state.borrow(), Some(OsString::from("OUT_DIR")));
+    }
+
+    #[test]
+    fn get_out_file_without_out_dir_or_configure_is_err() {
+        let var_os = |_: &OsStr| None;
+
+        let result = get_out_file(&None, var_os);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn get_directory_gets_configured_directory() {
+        let dir = tempdir().expect("Can't get temporary directory.");
+        fs::write(dir.path().join("myfile.txt"), "Hi there!")
+            .expect("Can't write to to temporary file.");
+
+        let dirs: Vec<_> = get_directory(&Some(dir.path().into()), |_| panic!("Got env var."))
+            .expect("Can't get directory")
+            .try_collect()
+            .expect("Can't get entries.");
+
+        assert_eq!(dirs.len(), 1);
+        assert_eq!(dirs[0].file_name(), "myfile.txt");
+    }
+
+    #[test]
+    fn get_directory_gets_from_expected_env_var_without_config(){
+        let _ = get_directory(&None, |k| {
+            assert_eq!(k, OsStr::new("CARGO_MANIFEST_DIR"));
+            None
+        });
+    }
+
+    #[test]
+    fn get_directory_gets_from_env_var_without_config() {
+        let dir = tempdir().expect("Can't get temporary directory.");
+        let path = dir.path().join("protocols");
+        fs::create_dir(&path).expect("Can't create directory.");
+        fs::write(path.join("myfile.txt"), "Hi there!")
+            .expect("Can't write to to temporary file.");
+
+        let dirs: Vec<_> = get_directory(&None, |_| Some(dir.path().as_os_str().to_os_string()))
+            .expect("Can't get directory")
+            .try_collect()
+            .expect("Can't get entries.");
+
+        assert_eq!(dirs.len(), 1);
+        assert_eq!(dirs[0].file_name(), "myfile.txt");
+    }
+
+    #[test]
+    fn get_directory_without_config_or_env_var_is_error() {
+        let result = get_directory(&None, |_| None);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn to_protocol_is_none_for_non_xml_file() {
+        let dir = tempdir().expect("Can't get temporary directory.");
+        fs::write(dir.path().join("myfile.txt"), "Hi there!")
+            .expect("Can't write to temporary file.");
+        let mut entries = fs::read_dir(dir.path()).expect("Can't read dir");
+
+        let entry = entries.next().expect("Can't get next entry.");
+        let result = dir_entry_to_protocol(entry);
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn to_protocol_is_protocol_for_xml_file() {
+        let dir = tempdir().expect("Can't get temporary directory.");
+        fs::copy(get_test_file("tests.xml"), dir.path().join("tests.xml"))
+            .expect("Can't copy tests.xml file.");
+        let mut entries = fs::read_dir(dir.path()).expect("Can't read dir");
+
+        let entry = entries.next().expect("Can't get next entry.");
+        let result = dir_entry_to_protocol(entry);
+
+        assert_matches!(result, Some(Ok(_)));
+    }
+
+    #[test]
+    fn to_protocol_is_none_for_xml_directory() {
+        let dir = tempdir().expect("Can't get temporary directory.");
+        fs::create_dir(dir.path().join("tests.xm")).expect("Can't create directory.");
+        let mut entries = fs::read_dir(dir.path()).expect("Can't read dir");
+
+        let entry = entries.next().expect("Can't get next entry.");
+        let result = dir_entry_to_protocol(entry);
+
+        assert!(result.is_none());
+   }
+
+    fn get_test_file(test_file: &str) -> PathBuf {
+        let mut path = PathBuf::from("test_data");
+        path.push(test_file);
+
+        path
     }
 }
