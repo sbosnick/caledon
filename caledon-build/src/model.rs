@@ -195,7 +195,7 @@ impl Protocol {
         format_ident!("{}", self.name.to_class_case())
     }
 
-    pub fn interfaces(&self) -> impl Iterator<Item = &Interface>+Clone {
+    pub fn interfaces(&self) -> impl Iterator<Item = &Interface> + Clone {
         self.interfaces.iter()
     }
 }
@@ -208,7 +208,6 @@ impl Documentation for &Protocol {
     fn description(&self) -> Option<&Description> {
         self.description.as_ref()
     }
-
 }
 
 impl Interface {

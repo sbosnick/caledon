@@ -10,10 +10,13 @@ use std::io::Write;
 
 use inflector::Inflector;
 use itertools::Itertools;
-use proc_macro2::{TokenStream, Ident};
+use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
-use crate::{model::Protocol, Error, Result, model::Interface, model::Documentation};
+use crate::{
+    model::{Documentation, Interface, Protocol},
+    Error, Result,
+};
 
 pub fn generate_code<'a, W, I>(mut file: W, protocols: I) -> Result<()>
 where
@@ -62,11 +65,15 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
     let protocol_ident = protocol.protocol_ident();
     let interfaces_ident = protocol.interfaces_ident();
     let enum_entry_ident = protocol.enum_entry_ident();
-    let mod_doc = format_long_doc(protocol, |name| format!("Caledon types for the {} protocol.", name));
+    let mod_doc = format_long_doc(protocol, |name| {
+        format!("Caledon types for the {} protocol.", name)
+    });
     let protocol_doc = format!("The {} protocol.", protocol.name());
     let interfaces_doc = format!("The interfaces of the {} protocol.", protocol.name());
     let entries = protocol.interfaces().map(generate_interface_entry);
-    let interfaces = protocol.interfaces().map(|i| generate_interface(i, &interfaces_ident));
+    let interfaces = protocol
+        .interfaces()
+        .map(|i| generate_interface(i, &interfaces_ident));
 
     quote! {
         #[doc = #mod_doc]
@@ -205,7 +212,7 @@ where
     doc.description().map_or_else(
         || f(doc.name()),
         |desc| {
-            let mut s =  desc.summary().to_sentence_case();
+            let mut s = desc.summary().to_sentence_case();
             if !s.ends_with('.') {
                 s.push('.');
             }
