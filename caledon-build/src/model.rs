@@ -157,7 +157,7 @@ pub struct Description {
     body: Option<String>,
 }
 
-// === impl Protocol ===
+// === impl ===
 impl Protocol {
     pub fn new(path: impl AsRef<Path>) -> Result<Protocol> {
         let path = path.as_ref();
@@ -182,8 +182,6 @@ impl Protocol {
         format_ident!("{}Protocol", self.name.to_class_case())
     }
 
-    // TODO: remove this when it is no longer needed.
-    #[allow(dead_code)]
     pub fn interfaces_ident(&self) -> Ident {
         format_ident!("{}Interfaces", self.name.to_class_case())
     }
@@ -199,9 +197,33 @@ impl Protocol {
     pub fn description(&self) -> Option<&Description> {
         self.description.as_ref()
     }
+
+    pub fn interfaces(&self) -> impl Iterator<Item = &Interface>+Clone {
+        self.interfaces.iter()
+    }
 }
 
-// === impl Description ===
+impl Interface {
+    pub fn interface_ident(&self) -> Ident {
+        format_ident!("{}", self.name.to_class_case())
+    }
+
+    pub fn enum_entry_ident(&self) -> Ident {
+        format_ident!("{}", self.name.to_class_case())
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn description(&self) -> Option<&Description> {
+        self.items.iter().find_map(|item| match item {
+            InterfaceItem::Description(desc) => Some(desc),
+            _ => None,
+        })
+    }
+}
+
 impl Description {
     pub fn summary(&self) -> &str {
         &self.summary

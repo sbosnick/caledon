@@ -8,10 +8,12 @@
 
 use std::io::Write;
 
+use inflector::Inflector;
+use itertools::Itertools;
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::{model::Protocol, Error, Result};
+use crate::{model::Protocol, Error, Result, model::Interface};
 
 pub fn generate_code<'a, W, I>(mut file: W, protocols: I) -> Result<()>
 where
@@ -27,7 +29,7 @@ where
         writeln!(file, "//     {}", protocol.path().display()).map_err(Error::file_write)?;
     }
 
-    let entries = protocols.clone().map(generate_protocol_list_entries);
+    let entries = protocols.clone().map(generate_protocol_list_entry);
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
@@ -58,10 +60,15 @@ where
 fn generate_protocol(protocol: &Protocol) -> TokenStream {
     let mod_ident = protocol.mod_ident();
     let protocol_ident = protocol.protocol_ident();
+    let interfaces_ident = protocol.interfaces_ident();
+    let enum_entry_ident = protocol.enum_entry_ident();
     let mod_doc = protocol.description().map_or_else(
         || format!("caledon types for {} protocol", protocol.name()),
         |desc| {
-            let mut s = desc.summary().to_owned();
+            let mut s = desc.summary().to_sentence_case();
+            if !s.ends_with('.') {
+                s += ".";
+            }
             if let Some(detail) = desc.detail() {
                 s += "\n";
                 s += detail;
@@ -70,23 +77,71 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
         },
     );
     let protocol_doc = format!("The {} protocol.", protocol.name());
+    let interfaces_doc = format!("The interfaces of the {} protocol.", protocol.name());
+    let entries = protocol.interfaces().map(generate_interface_entry);
+    let interfaces = protocol.interfaces().map(generate_interface);
 
     quote! {
         #[doc = #mod_doc]
         pub mod #mod_ident {
+            use std::convert::TryFrom;
+
+            use crate::core::{InterfaceList, Protocol};
+
             #[doc = #protocol_doc]
             pub struct #protocol_ident;
+
+            impl Protocol for #protocol_ident {
+                type Interfaces = #interfaces_ident;
+
+                type ProtocolList = super::Protocols;
+            }
+
+            impl From<#protocol_ident> for super::Protocols {
+                fn from(t: #protocol_ident) -> Self {
+                    Self::#enum_entry_ident(t)
+                }
+            }
+
+            impl TryFrom<super::Protocols> for #protocol_ident {
+                type Error = ();
+
+                fn try_from(p: super::Protocols) -> Result<Self, Self::Error> {
+                    #[allow(unreachable_patterns)]
+                    match p {
+                        super::Protocols::#enum_entry_ident(inner) => Ok(inner),
+                        _ => Err(()),
+                    }
+                }
+            }
+
+            #[doc = #interfaces_doc]
+            pub enum #interfaces_ident {
+                #(#entries,)*
+            }
+
+            impl InterfaceList for #interfaces_ident {
+                type Protocol = #protocol_ident;
+            }
+
+            #(#interfaces)*
         }
     }
 }
 
-fn generate_protocol_list_entries(protocol: &Protocol) -> TokenStream {
+fn generate_protocol_list_entry(protocol: &Protocol) -> TokenStream {
     let entry = protocol.enum_entry_ident();
     let mod_ident = protocol.mod_ident();
     let protocol_ident = protocol.protocol_ident();
     let entry_doc = protocol.description().map_or_else(
         || format!("The {} protocol.", protocol.name()),
-        |desc| desc.summary().to_owned(),
+        |desc| {
+            let mut s =  desc.summary().to_sentence_case();
+            if !s.ends_with('.') {
+                s.push('.');
+            }
+            s
+        }
     );
 
     quote! {
@@ -94,3 +149,47 @@ fn generate_protocol_list_entries(protocol: &Protocol) -> TokenStream {
         #entry(#mod_ident::#protocol_ident)
     }
 }
+
+fn generate_interface(interface: &Interface) -> TokenStream {
+    let interface_ident = interface.interface_ident();
+    let interface_doc = interface.description().map_or_else(
+        || format!("The {} interface.", interface.name()),
+        |desc| {
+            let mut s = desc.summary().to_sentence_case();
+            if !s.ends_with('.') {
+                s.push('.');
+            }
+            if let Some(detail) = desc.detail() {
+                s += "\n\n";
+                s.extend(detail.lines().map(|l| l.trim_start()).intersperse("\n"));
+            }
+            s
+        },
+    );
+
+    quote! {
+        #[doc = #interface_doc]
+        pub struct #interface_ident;
+    }
+}
+
+fn generate_interface_entry(interface: &Interface) -> TokenStream {
+    let entry = interface.enum_entry_ident();
+    let interface_ident = interface.interface_ident();
+    let entry_doc = interface.description().map_or_else(
+        || format!("The {} interface.", interface.name()),
+        |desc| {
+            let mut s = desc.summary().to_sentence_case();
+            if !s.ends_with('.') {
+                s.push('.');
+            }
+            s
+        }
+    );
+
+    quote! {
+        #[doc = #entry_doc]
+        #entry(#interface_ident)
+    }
+}
+
