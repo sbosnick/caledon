@@ -212,6 +212,9 @@ impl Documentation for &Protocol {
 }
 
 impl Interface {
+    pub fn mod_ident(&self) -> Ident {
+        format_ident!("{}", self.name.to_snake_case())
+    }
     pub fn interface_ident(&self) -> Ident {
         format_ident!("{}", self.name.to_class_case())
     }
