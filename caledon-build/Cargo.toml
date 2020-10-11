@@ -13,6 +13,7 @@ thiserror = "1.0.20"
 itertools = "0.9.0"
 quote = "1.0.7"
 proc-macro2 = "1.0.24"
+Inflector = "0.11.4"
 
 [dev-dependencies]
 log = "0.4.11"

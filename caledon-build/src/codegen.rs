@@ -27,9 +27,28 @@ where
         writeln!(file, "//     {}", protocol.path().display()).map_err(Error::file_write)?;
     }
 
+    let entries = protocols.clone().map(generate_protocol_list_entries);
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
+        use crate::core::{ProtocolFamily, ProtocolList};
+
+        #[doc = "The family of protocols implement by caledon."]
+        pub struct Family;
+
+        impl ProtocolFamily for Family {
+            type Protocols = Protocols;
+        }
+
+        #[doc = "The list of protocols implemented by caledon."]
+        pub enum Protocols {
+            #(#entries,)*
+        }
+
+        impl ProtocolList for Protocols {
+            type ProtocolFamily = Family;
+        }
+
         #(#modules)*
     };
 
@@ -38,7 +57,8 @@ where
 
 fn generate_protocol(protocol: &Protocol) -> TokenStream {
     let mod_ident = protocol.mod_ident();
-    let doc = protocol.description().map_or_else(
+    let protocol_ident = protocol.protocol_ident();
+    let mod_doc = protocol.description().map_or_else(
         || format!("caledon types for {} protocol", protocol.name()),
         |desc| {
             let mut s = desc.summary().to_owned();
@@ -49,10 +69,28 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
             s
         },
     );
+    let protocol_doc = format!("The {} protocol.", protocol.name());
 
     quote! {
-        #[doc = #doc]
+        #[doc = #mod_doc]
         pub mod #mod_ident {
+            #[doc = #protocol_doc]
+            pub struct #protocol_ident;
         }
+    }
+}
+
+fn generate_protocol_list_entries(protocol: &Protocol) -> TokenStream {
+    let entry = protocol.enum_entry_ident();
+    let mod_ident = protocol.mod_ident();
+    let protocol_ident = protocol.protocol_ident();
+    let entry_doc = protocol.description().map_or_else(
+        || format!("The {} protocol.", protocol.name()),
+        |desc| desc.summary().to_owned(),
+    );
+
+    quote! {
+        #[doc = #entry_doc]
+        #entry(#mod_ident::#protocol_ident)
     }
 }

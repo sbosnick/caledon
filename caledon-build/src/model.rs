@@ -8,6 +8,7 @@
 
 use std::{fs::File, io::BufReader, path::Path, path::PathBuf};
 
+use inflector::Inflector;
 use proc_macro2::Ident;
 use quote::format_ident;
 use serde::Deserialize;
@@ -174,7 +175,21 @@ impl Protocol {
     }
 
     pub fn mod_ident(&self) -> Ident {
-        format_ident!("{}", self.name.to_lowercase())
+        format_ident!("{}", self.name.to_snake_case())
+    }
+
+    pub fn protocol_ident(&self) -> Ident {
+        format_ident!("{}Protocol", self.name.to_class_case())
+    }
+
+    // TODO: remove this when it is no longer needed.
+    #[allow(dead_code)]
+    pub fn interfaces_ident(&self) -> Ident {
+        format_ident!("{}Interfaces", self.name.to_class_case())
+    }
+
+    pub fn enum_entry_ident(&self) -> Ident {
+        format_ident!("{}", self.name.to_class_case())
     }
 
     pub fn name(&self) -> &str {
