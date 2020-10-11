@@ -8,6 +8,8 @@
 
 use std::{fs::File, io::BufReader, path::Path, path::PathBuf};
 
+use proc_macro2::Ident;
+use quote::format_ident;
 use serde::Deserialize;
 use serde_xml_rs::from_reader;
 
@@ -169,6 +171,29 @@ impl Protocol {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn mod_ident(&self) -> Ident {
+        format_ident!("{}", self.name.to_lowercase())
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn description(&self) -> Option<&Description> {
+        self.description.as_ref()
+    }
+}
+
+// === impl Description ===
+impl Description {
+    pub fn summary(&self) -> &str {
+        &self.summary
+    }
+
+    pub fn detail(&self) -> Option<&str> {
+        self.body.as_deref()
     }
 }
 
