@@ -158,6 +158,11 @@ pub struct Description {
 }
 
 // === impl ===
+pub trait Documentation {
+    fn name(&self) -> &str;
+    fn description(&self) -> Option<&Description>;
+}
+
 impl Protocol {
     pub fn new(path: impl AsRef<Path>) -> Result<Protocol> {
         let path = path.as_ref();
@@ -190,17 +195,20 @@ impl Protocol {
         format_ident!("{}", self.name.to_class_case())
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn description(&self) -> Option<&Description> {
-        self.description.as_ref()
-    }
-
     pub fn interfaces(&self) -> impl Iterator<Item = &Interface>+Clone {
         self.interfaces.iter()
     }
+}
+
+impl Documentation for &Protocol {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> Option<&Description> {
+        self.description.as_ref()
+    }
+
 }
 
 impl Interface {
@@ -211,12 +219,14 @@ impl Interface {
     pub fn enum_entry_ident(&self) -> Ident {
         format_ident!("{}", self.name.to_class_case())
     }
+}
 
-    pub fn name(&self) -> &str {
+impl Documentation for &Interface {
+    fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn description(&self) -> Option<&Description> {
+    fn description(&self) -> Option<&Description> {
         self.items.iter().find_map(|item| match item {
             InterfaceItem::Description(desc) => Some(desc),
             _ => None,
