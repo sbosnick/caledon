@@ -9,4 +9,3 @@
 fn main() {
     caledon_build::generate().unwrap()
 }
-

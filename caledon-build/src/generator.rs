@@ -91,7 +91,6 @@ impl Generator {
         let path = self.get_directory_path()?;
         println!("cargo:rerun-if-changed={}", path.display());
 
-
         self.run_rustfmt()
     }
 
