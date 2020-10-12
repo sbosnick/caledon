@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::io::Write;
+use std::{convert::TryInto, io::Write};
 
 use inflector::Inflector;
 use itertools::Itertools;
@@ -144,9 +144,9 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
     let req_doc = format!("The requests for the {} interface.", interface.name());
     let evt_doc = format!("The events for the {} interface.", interface.name());
     let request_entries = interface.requests().map(generate_request_entry);
-    let requests = interface.requests().map(generate_request);
+    let requests = interface.requests().enumerate().map(generate_request);
     let event_entries = interface.events().map(generate_event_entry);
-    let events = interface.events().map(generate_event);
+    let events = interface.events().enumerate().map(generate_event);
 
     quote! {
         #[doc = #interface_doc]
@@ -178,7 +178,9 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
 
         #[doc = #mod_doc]
         pub mod #mod_ident {
-            use crate::core::MessageList;
+            use std::convert::TryFrom;
+
+            use crate::core::{Message, MessageList, ObjectId};
 
             #[doc = #req_doc]
             pub enum Requests {
@@ -216,13 +218,51 @@ fn generate_interface_entry(interface: &Interface) -> TokenStream {
     }
 }
 
-fn generate_request(request: &Request) -> TokenStream {
+fn generate_request((opcode, request): (usize, &Request)) -> TokenStream {
     let request_ident = request.request_ident();
     let request_doc = format_long_doc(request, |name| format!("The {} request.", name));
+    let enum_entry_ident = request.enum_entry_ident();
+    let opcode: u16 = opcode
+        .try_into()
+        .expect("too many requests: opcode exceeds u16::MAX");
 
     quote! {
         #[doc = #request_doc]
         pub struct #request_ident;
+
+        impl Message for #request_ident {
+            type Signature = ();
+
+            type MessageList = Requests;
+
+            const OPCODE: u16 = #opcode;
+
+            fn args(&self) -> &Self::Signature {
+                &()
+            }
+
+            fn sender(&self) -> ObjectId {
+                ObjectId::new(0)
+            }
+        }
+
+        impl From<#request_ident> for Requests {
+            fn from(r: #request_ident) -> Self {
+                Self::#enum_entry_ident(r)
+            }
+        }
+
+        impl TryFrom<Requests> for #request_ident {
+            type Error = ();
+
+            fn try_from(i: Requests) -> Result<Self, Self::Error> {
+                #[allow(unreachable_patterns)]
+                match i {
+                    Requests::#enum_entry_ident(inner) => Ok(inner),
+                    _ => Err(()),
+                }
+            }
+        }
     }
 }
 
@@ -237,13 +277,51 @@ fn generate_request_entry(request: &Request) -> TokenStream {
     }
 }
 
-fn generate_event(event: &Event) -> TokenStream {
+fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
     let event_ident = event.event_ident();
     let event_doc = format_long_doc(event, |name| format!("The {} event.", name));
+    let opcode: u16 = opcode
+        .try_into()
+        .expect("too many events: opcode exceeds u16:MAX");
+    let enum_entry_ident = event.enum_entry_ident();
 
     quote! {
         #[doc = #event_doc]
         pub struct #event_ident;
+
+        impl Message for #event_ident {
+            type Signature = ();
+
+            type MessageList = Events;
+
+            const OPCODE: u16 = #opcode;
+
+            fn args(&self) -> &Self::Signature {
+                &()
+            }
+
+            fn sender(&self) -> ObjectId {
+                ObjectId::new(0)
+            }
+        }
+
+        impl From<#event_ident> for Events {
+            fn from(e: #event_ident) -> Self {
+                Self::#enum_entry_ident(e)
+            }
+        }
+
+        impl TryFrom<Events> for #event_ident {
+            type Error = ();
+
+            fn try_from(i: Events) -> Result<Self, Self::Error> {
+                #[allow(unreachable_patterns)]
+                match i {
+                    Events::#enum_entry_ident(inner) => Ok(inner),
+                    _ => Err(()),
+                }
+            }
+        }
     }
 }
 
