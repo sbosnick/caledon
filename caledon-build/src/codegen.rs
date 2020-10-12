@@ -14,7 +14,7 @@ use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
 use crate::{
-    model::{Documentation, Interface, Protocol},
+    model::{Documentation, Event, Interface, Protocol, Request},
     Error, Result,
 };
 
@@ -143,6 +143,10 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
     let mod_doc = format!("The messages for the {} interface.", interface.name());
     let req_doc = format!("The requests for the {} interface.", interface.name());
     let evt_doc = format!("The events for the {} interface.", interface.name());
+    let request_entries = interface.requests().map(generate_request_entry);
+    let requests = interface.requests().map(generate_request);
+    let event_entries = interface.events().map(generate_event_entry);
+    let events = interface.events().map(generate_event);
 
     quote! {
         #[doc = #interface_doc]
@@ -177,18 +181,26 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
             use crate::core::MessageList;
 
             #[doc = #req_doc]
-            pub enum Requests {}
+            pub enum Requests {
+                #(#request_entries,)*
+            }
 
             impl MessageList for Requests {
                 type Interface = super::#interface_ident;
             }
 
             #[doc = #evt_doc]
-            pub enum Events {}
+            pub enum Events {
+                #(#event_entries,)*
+            }
 
             impl MessageList for Events {
                 type Interface = super::#interface_ident;
             }
+
+            #(#requests)*
+
+            #(#events)*
         }
     }
 }
@@ -201,6 +213,48 @@ fn generate_interface_entry(interface: &Interface) -> TokenStream {
     quote! {
         #[doc = #entry_doc]
         #entry(#interface_ident)
+    }
+}
+
+fn generate_request(request: &Request) -> TokenStream {
+    let request_ident = request.request_ident();
+    let request_doc = format_long_doc(request, |name| format!("The {} request.", name));
+
+    quote! {
+        #[doc = #request_doc]
+        pub struct #request_ident;
+    }
+}
+
+fn generate_request_entry(request: &Request) -> TokenStream {
+    let entry = request.enum_entry_ident();
+    let request_ident = request.request_ident();
+    let entry_doc = format_short_doc(request, |name| format!("The {} request.", name));
+
+    quote! {
+        #[doc = #entry_doc]
+        #entry(#request_ident)
+    }
+}
+
+fn generate_event(event: &Event) -> TokenStream {
+    let event_ident = event.event_ident();
+    let event_doc = format_long_doc(event, |name| format!("The {} event.", name));
+
+    quote! {
+        #[doc = #event_doc]
+        pub struct #event_ident;
+    }
+}
+
+fn generate_event_entry(event: &Event) -> TokenStream {
+    let entry = event.enum_entry_ident();
+    let event_ident = event.event_ident();
+    let entry_doc = format_short_doc(event, |name| format!("The {} event.", name));
+
+    quote! {
+        #[doc = #entry_doc]
+        #entry(#event_ident)
     }
 }
 

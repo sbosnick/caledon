@@ -221,6 +221,20 @@ impl Interface {
     pub fn enum_entry_ident(&self) -> Ident {
         format_ident!("{}", self.name.to_class_case())
     }
+
+    pub fn requests(&self) -> impl Iterator<Item = &Request> {
+        self.items.iter().filter_map(|item| match item {
+            InterfaceItem::Request(req) => Some(req),
+            _ => None,
+        })
+    }
+
+    pub fn events(&self) -> impl Iterator<Item = &Event> {
+        self.items.iter().filter_map(|item| match item {
+            InterfaceItem::Event(evt) => Some(evt),
+            _ => None,
+        })
+    }
 }
 
 impl Documentation for &Interface {
@@ -233,6 +247,46 @@ impl Documentation for &Interface {
             InterfaceItem::Description(desc) => Some(desc),
             _ => None,
         })
+    }
+}
+
+impl Request {
+    pub fn enum_entry_ident(&self) -> Ident {
+        format_ident!("{}", self.name.to_class_case())
+    }
+
+    pub fn request_ident(&self) -> Ident {
+        format_ident!("{}Request", self.name.to_class_case())
+    }
+}
+
+impl Documentation for &Request {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> Option<&Description> {
+        self.description.as_ref()
+    }
+}
+
+impl Event {
+    pub fn enum_entry_ident(&self) -> Ident {
+        format_ident!("{}", self.name.to_class_case())
+    }
+
+    pub fn event_ident(&self) -> Ident {
+        format_ident!("{}Event", self.name.to_class_case())
+    }
+}
+
+impl Documentation for &Event {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> Option<&Description> {
+        self.description.as_ref()
     }
 }
 
