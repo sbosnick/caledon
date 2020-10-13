@@ -80,7 +80,13 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
         pub mod #mod_ident {
             use std::convert::TryFrom;
 
-            use crate::core::{Interface, InterfaceList, Protocol};
+            #[allow(unused_imports)]
+            use std::ffi::CString;
+
+            use crate::core::{Interface, InterfaceList, ObjectId, Protocol};
+
+            #[allow(unused_imports)]
+            use crate::core::{Decimal, Fd};
 
             #[doc = #protocol_doc]
             pub struct #protocol_ident;
@@ -143,14 +149,30 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
     let mod_doc = format!("The messages for the {} interface.", interface.name());
     let req_doc = format!("The requests for the {} interface.", interface.name());
     let evt_doc = format!("The events for the {} interface.", interface.name());
+    let new_doc = format!("Create a new {}.", interface_ident);
     let request_entries = interface.requests().map(generate_request_entry);
     let requests = interface.requests().enumerate().map(generate_request);
+    let request_factories = interface.requests().map(|r| generate_request_factory(r, &mod_ident));
     let event_entries = interface.events().map(generate_event_entry);
     let events = interface.events().enumerate().map(generate_event);
+    let event_factories = interface.events().map(|e| generate_event_factory(e, &mod_ident));
 
     quote! {
         #[doc = #interface_doc]
-        pub struct #interface_ident;
+        pub struct #interface_ident {
+            id: ObjectId,
+        }
+
+        impl #interface_ident {
+            #[doc = #new_doc]
+            pub fn new(id: ObjectId) -> Self {
+                Self { id }
+            }
+
+            #(#request_factories)*
+
+            #(#event_factories)*
+        }
 
         impl Interface for #interface_ident {
             type Requests = #mod_ident::Requests;
@@ -290,6 +312,21 @@ fn generate_request_entry(request: &Request) -> TokenStream {
     }
 }
 
+fn generate_request_factory(request: &Request, mod_ident: &Ident) -> TokenStream {
+    let param_list = request.args().map(generate_new_param);
+    let param_names = request.args().map(|arg| arg.param_ident());
+    let request_ident = request.request_ident();
+    let factory_name = request.request_factory_ident();
+    let factory_doc = format_message_new_doc(&request_ident, false, request.args());
+
+    quote! {
+        #[doc = #factory_doc]
+        pub fn #factory_name(&self, #(#param_list),*) -> #mod_ident::#request_ident {
+            #mod_ident::#request_ident::new(self.id, #(#param_names),*)
+        }
+    }
+}
+
 fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
     let event_ident = event.event_ident();
     let event_doc = format_long_doc(event, |name| format!("The {} event.", name));
@@ -356,10 +393,26 @@ fn generate_event_entry(event: &Event) -> TokenStream {
     }
 }
 
+fn generate_event_factory(event: &Event, mod_ident: &Ident) -> TokenStream {
+    let param_list = event.args().map(generate_new_param);
+    let param_names = event.args().map(|arg| arg.param_ident());
+    let event_ident = event.event_ident();
+    let factory_name = event.event_factory_ident();
+    let factory_doc = format_message_new_doc(&event_ident, false, event.args());
+
+    quote! {
+        #[doc = #factory_doc]
+        pub fn #factory_name(&self, #(#param_list),*) -> #mod_ident::#event_ident {
+            #mod_ident::#event_ident::new(self.id, #(#param_names),*)
+        }
+    }
+}
+
+
 fn generate_new_impl(message_ident: &Ident, args: impl Args) -> TokenStream {
     let params = args.args().map(generate_new_param);
     let param_names = args.args().map(|arg| arg.param_ident());
-    let new_doc = format_message_new_doc(message_ident, args.args());
+    let new_doc = format_message_new_doc(message_ident, true, args.args());
 
     quote! {
         impl #message_ident {
@@ -442,10 +495,18 @@ where
     )
 }
 
-fn format_message_new_doc<'a>(message_ident: &Ident, args: impl Iterator<Item = &'a Arg>) -> String {
-    let mut s = format!("Create a new {}.\n\n# Parameters\n\n", message_ident);
+fn format_message_new_doc<'a>(message_ident: &Ident, incl_sender: bool, args: impl Iterator<Item = &'a Arg>) -> String {
+    let mut args = args.peekable();
+    let mut s = format!("Create a new `{}`.", message_ident);
 
-    s += "| Name | Description |\n|---|---|\n| `sender` | the object sending the message |\n";
+    if incl_sender || args.peek().is_some() {
+        s += "\n\n# Parameters\n\n| Name | Description |\n|---|---|\n";
+    }
+
+    if incl_sender {
+        s += "| `sender` | the object sending the message |\n";
+    }
+
     for arg in args {
         writeln!(s, "| `{}` | {} {} |",
                  arg.param_name(),

@@ -262,6 +262,10 @@ impl Request {
     pub fn request_ident(&self) -> Ident {
         format_ident!("{}Request", self.name.to_class_case())
     }
+
+    pub fn request_factory_ident(&self) -> Ident {
+        format_ident!("{}_request", self.name.to_snake_case())
+    }
 }
 
 impl Documentation for &Request {
@@ -287,6 +291,10 @@ impl Event {
 
     pub fn event_ident(&self) -> Ident {
         format_ident!("{}Event", self.name.to_class_case())
+    }
+
+    pub fn event_factory_ident(&self) -> Ident {
+        format_ident!("{}_event", self.name.to_snake_case())
     }
 }
 
