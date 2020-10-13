@@ -365,7 +365,6 @@ impl<'a> Iterator for ArgIter<'a> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;

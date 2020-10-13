@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{convert::TryInto, io::Write, fmt::Write as _};
+use std::{convert::TryInto, fmt::Write as _, io::Write};
 
 use inflector::Inflector;
 use itertools::Itertools;
@@ -152,10 +152,14 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
     let new_doc = format!("Create a new {}.", interface_ident);
     let request_entries = interface.requests().map(generate_request_entry);
     let requests = interface.requests().enumerate().map(generate_request);
-    let request_factories = interface.requests().map(|r| generate_request_factory(r, &mod_ident));
+    let request_factories = interface
+        .requests()
+        .map(|r| generate_request_factory(r, &mod_ident));
     let event_entries = interface.events().map(generate_event_entry);
     let events = interface.events().enumerate().map(generate_event);
-    let event_factories = interface.events().map(|e| generate_event_factory(e, &mod_ident));
+    let event_factories = interface
+        .events()
+        .map(|e| generate_event_factory(e, &mod_ident));
 
     quote! {
         #[doc = #interface_doc]
@@ -408,7 +412,6 @@ fn generate_event_factory(event: &Event, mod_ident: &Ident) -> TokenStream {
     }
 }
 
-
 fn generate_new_impl(message_ident: &Ident, args: impl Args) -> TokenStream {
     let params = args.args().map(generate_new_param);
     let param_names = args.args().map(|arg| arg.param_ident());
@@ -446,14 +449,17 @@ fn generate_signature(args: impl Args) -> TokenStream {
 
 fn generate_arg_type(arg: &Arg) -> TokenStream {
     match arg.type_name() {
-        "new_id"|"object" => quote! { ObjectId },
+        "new_id" | "object" => quote! { ObjectId },
         "int" => quote! { i32 },
         "uint" => quote! { u32 },
         "fixed" => quote! { Decimal },
         "string" => quote! { CString },
         "array" => quote! { Box<[u8]> },
         "fd" => quote! { Fd },
-        _ => panic!("Encountered an unexpected argument type: {}", arg.type_name()),
+        _ => panic!(
+            "Encountered an unexpected argument type: {}",
+            arg.type_name()
+        ),
     }
 }
 
@@ -495,7 +501,11 @@ where
     )
 }
 
-fn format_message_new_doc<'a>(message_ident: &Ident, incl_sender: bool, args: impl Iterator<Item = &'a Arg>) -> String {
+fn format_message_new_doc<'a>(
+    message_ident: &Ident,
+    incl_sender: bool,
+    args: impl Iterator<Item = &'a Arg>,
+) -> String {
     let mut args = args.peekable();
     let mut s = format!("Create a new `{}`.", message_ident);
 
@@ -508,13 +518,18 @@ fn format_message_new_doc<'a>(message_ident: &Ident, incl_sender: bool, args: im
     }
 
     for arg in args {
-        writeln!(s, "| `{}` | {} {} |",
-                 arg.param_name(),
-                 arg.summary().unwrap_or(""),
-                 if arg.type_name() == "new_id" { "(a new_id)" } else { "" }
-            )
-            .expect("Write to string failed");
-
+        writeln!(
+            s,
+            "| `{}` | {} {} |",
+            arg.param_name(),
+            arg.summary().unwrap_or(""),
+            if arg.type_name() == "new_id" {
+                "(a new_id)"
+            } else {
+                ""
+            }
+        )
+        .expect("Write to string failed");
     }
 
     s
