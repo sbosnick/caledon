@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{convert::TryInto, io::Write};
+use std::{convert::TryInto, io::Write, fmt::Write as _};
 
 use inflector::Inflector;
 use itertools::Itertools;
@@ -14,7 +14,7 @@ use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
 use crate::{
-    model::{Documentation, Event, Interface, Protocol, Request},
+    model::{Arg, Args, Documentation, Event, Interface, Protocol, Request},
     Error, Result,
 };
 
@@ -180,7 +180,13 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
         pub mod #mod_ident {
             use std::convert::TryFrom;
 
+            #[allow(unused_imports)]
+            use std::ffi::CString;
+
             use crate::core::{Message, MessageList, ObjectId};
+
+            #[allow(unused_imports)]
+            use crate::core::{Decimal, Fd};
 
             #[doc = #req_doc]
             pub enum Requests {
@@ -222,27 +228,34 @@ fn generate_request((opcode, request): (usize, &Request)) -> TokenStream {
     let request_ident = request.request_ident();
     let request_doc = format_long_doc(request, |name| format!("The {} request.", name));
     let enum_entry_ident = request.enum_entry_ident();
+    let signature = generate_signature(request);
+    let new_impl = generate_new_impl(&request_ident, request);
     let opcode: u16 = opcode
         .try_into()
         .expect("too many requests: opcode exceeds u16::MAX");
 
     quote! {
         #[doc = #request_doc]
-        pub struct #request_ident;
+        pub struct #request_ident {
+            sender: ObjectId,
+            args: #signature,
+        }
+
+        #new_impl
 
         impl Message for #request_ident {
-            type Signature = ();
+            type Signature = #signature;
 
             type MessageList = Requests;
 
             const OPCODE: u16 = #opcode;
 
             fn args(&self) -> &Self::Signature {
-                &()
+                &self.args
             }
 
             fn sender(&self) -> ObjectId {
-                ObjectId::new(0)
+                self.sender
             }
         }
 
@@ -284,24 +297,31 @@ fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
         .try_into()
         .expect("too many events: opcode exceeds u16:MAX");
     let enum_entry_ident = event.enum_entry_ident();
+    let signature = generate_signature(event);
+    let new_impl = generate_new_impl(&event_ident, event);
 
     quote! {
         #[doc = #event_doc]
-        pub struct #event_ident;
+        pub struct #event_ident {
+            sender: ObjectId,
+            args: #signature,
+        }
+
+        #new_impl
 
         impl Message for #event_ident {
-            type Signature = ();
+            type Signature = #signature;
 
             type MessageList = Events;
 
             const OPCODE: u16 = #opcode;
 
             fn args(&self) -> &Self::Signature {
-                &()
+                &self.args
             }
 
             fn sender(&self) -> ObjectId {
-                ObjectId::new(0)
+                self.sender
             }
         }
 
@@ -333,6 +353,54 @@ fn generate_event_entry(event: &Event) -> TokenStream {
     quote! {
         #[doc = #entry_doc]
         #entry(#event_ident)
+    }
+}
+
+fn generate_new_impl(message_ident: &Ident, args: impl Args) -> TokenStream {
+    let params = args.args().map(generate_new_param);
+    let param_names = args.args().map(|arg| arg.param_ident());
+    let new_doc = format_message_new_doc(message_ident, args.args());
+
+    quote! {
+        impl #message_ident {
+            #[doc = #new_doc]
+            pub fn new(sender: ObjectId, #(#params),*) -> Self {
+                Self {
+                    sender,
+                    args: (#(#param_names,)*),
+                }
+            }
+        }
+    }
+}
+
+fn generate_new_param(arg: &Arg) -> TokenStream {
+    let arg_type = generate_arg_type(arg);
+    let param_name = arg.param_ident();
+
+    quote! {
+        #param_name: #arg_type
+    }
+}
+
+fn generate_signature(args: impl Args) -> TokenStream {
+    let arg_types = args.args().map(generate_arg_type);
+
+    quote! {
+        (#(#arg_types,)*)
+    }
+}
+
+fn generate_arg_type(arg: &Arg) -> TokenStream {
+    match arg.type_name() {
+        "new_id"|"object" => quote! { ObjectId },
+        "int" => quote! { i32 },
+        "uint" => quote! { u32 },
+        "fixed" => quote! { Decimal },
+        "string" => quote! { CString },
+        "array" => quote! { Box<[u8]> },
+        "fd" => quote! { Fd },
+        _ => panic!("Encountered an unexpected argument type: {}", arg.type_name()),
     }
 }
 
@@ -372,4 +440,21 @@ where
             s
         },
     )
+}
+
+fn format_message_new_doc<'a>(message_ident: &Ident, args: impl Iterator<Item = &'a Arg>) -> String {
+    let mut s = format!("Create a new {}.\n\n# Parameters\n\n", message_ident);
+
+    s += "| Name | Description |\n|---|---|\n| `sender` | the object sending the message |\n";
+    for arg in args {
+        writeln!(s, "| `{}` | {} {} |",
+                 arg.param_name(),
+                 arg.summary().unwrap_or(""),
+                 if arg.type_name() == "new_id" { "(a new_id)" } else { "" }
+            )
+            .expect("Write to string failed");
+
+    }
+
+    s
 }

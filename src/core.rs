@@ -208,12 +208,6 @@ impl AsRawFd for &Fd {
 
 // === impl ObjectId ===
 
-impl ObjectId {
-    pub(crate) fn new(id: u32) -> ObjectId {
-        ObjectId(id)
-    }
-}
-
 impl fmt::Display for ObjectId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "object {}", self.0)

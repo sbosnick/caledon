@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{fs::File, io::BufReader, path::Path, path::PathBuf};
+use std::{fs::File, io::BufReader, path::Path, path::PathBuf, slice};
 
 use inflector::Inflector;
 use proc_macro2::Ident;
@@ -163,6 +163,10 @@ pub trait Documentation {
     fn description(&self) -> Option<&Description>;
 }
 
+pub trait Args {
+    fn args(&self) -> ArgIter;
+}
+
 impl Protocol {
     pub fn new(path: impl AsRef<Path>) -> Result<Protocol> {
         let path = path.as_ref();
@@ -270,6 +274,12 @@ impl Documentation for &Request {
     }
 }
 
+impl Args for &Request {
+    fn args(&self) -> ArgIter {
+        ArgIter::new(&self.args)
+    }
+}
+
 impl Event {
     pub fn enum_entry_ident(&self) -> Ident {
         format_ident!("{}", self.name.to_class_case())
@@ -290,6 +300,30 @@ impl Documentation for &Event {
     }
 }
 
+impl Args for &Event {
+    fn args(&self) -> ArgIter {
+        ArgIter::new(&self.args)
+    }
+}
+
+impl Arg {
+    pub fn type_name(&self) -> &str {
+        &self.type_name
+    }
+
+    pub fn param_ident(&self) -> Ident {
+        format_ident!("{}", self.name.to_snake_case())
+    }
+
+    pub fn param_name(&self) -> String {
+        self.name.to_snake_case()
+    }
+
+    pub fn summary(&self) -> Option<&str> {
+        self.summary.as_deref()
+    }
+}
+
 impl Description {
     pub fn summary(&self) -> &str {
         &self.summary
@@ -299,6 +333,30 @@ impl Description {
         self.body.as_deref()
     }
 }
+
+pub struct ArgIter<'a> {
+    inner: Option<slice::Iter<'a, Arg>>,
+}
+
+impl<'a> ArgIter<'a> {
+    fn new(args: &'a Option<Vec<Arg>>) -> Self {
+        Self {
+            inner: args.as_deref().map(|s| s.iter()),
+        }
+    }
+}
+
+impl<'a> Iterator for ArgIter<'a> {
+    type Item = &'a Arg;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner.as_mut() {
+            Some(i) => i.next(),
+            None => None,
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
