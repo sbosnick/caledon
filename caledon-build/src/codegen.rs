@@ -104,13 +104,13 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
             }
 
             impl TryFrom<super::Protocols> for #protocol_ident {
-                type Error = ();
+                type Error = crate::core::ConversionError;
 
                 fn try_from(p: super::Protocols) -> Result<Self, Self::Error> {
                     #[allow(unreachable_patterns)]
                     match p {
                         super::Protocols::#enum_entry_ident(inner) => Ok(inner),
-                        _ => Err(()),
+                        _ => Err(crate::core::ConversionError::protocol()),
                     }
                 }
             }
@@ -187,13 +187,13 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
         }
 
         impl TryFrom<#interface_list> for #interface_ident {
-            type Error = ();
+            type Error = crate::core::ConversionError;
 
             fn try_from(i: #interface_list) -> Result<Self, Self::Error> {
                 #[allow(unreachable_patterns)]
                 match i {
                     #interface_list::#enum_entry_ident(inner) => Ok(inner),
-                    _ => Err(()),
+                    _ => Err(crate::core::ConversionError::interface()),
                 }
             }
         }
@@ -288,13 +288,13 @@ fn generate_request((opcode, request): (usize, &Request)) -> TokenStream {
         }
 
         impl TryFrom<Requests> for #request_ident {
-            type Error = ();
+            type Error = crate::core::ConversionError;
 
             fn try_from(i: Requests) -> Result<Self, Self::Error> {
                 #[allow(unreachable_patterns)]
                 match i {
                     Requests::#enum_entry_ident(inner) => Ok(inner),
-                    _ => Err(()),
+                    _ => Err(crate::core::ConversionError::message()),
                 }
             }
         }
@@ -369,13 +369,13 @@ fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
         }
 
         impl TryFrom<Events> for #event_ident {
-            type Error = ();
+            type Error = crate::core::ConversionError;
 
             fn try_from(i: Events) -> Result<Self, Self::Error> {
                 #[allow(unreachable_patterns)]
                 match i {
                     Events::#enum_entry_ident(inner) => Ok(inner),
-                    _ => Err(()),
+                    _ => Err(crate::core::ConversionError::message()),
                 }
             }
         }
