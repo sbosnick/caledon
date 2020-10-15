@@ -147,13 +147,15 @@ fn dir_entry_to_protocol(entry: io::Result<fs::DirEntry>) -> Option<Result<Proto
 }
 
 fn is_xml_file(entry: &fs::DirEntry) -> bool {
-    entry.file_type().map_or(false, |ft| ft.is_file())
-        && match entry.path().extension() {
-            Some(ext) => ext
-                .to_str()
-                .map_or(false, |ext| "xml".eq_ignore_ascii_case(ext)),
-            None => false,
-        }
+    match (entry.file_type(), entry.path().extension()) {
+        (Ok(ft), Some(ext)) => ft.is_file() && is_xml_ext(ext),
+        (_, _) => false,
+    }
+}
+
+fn is_xml_ext(ext: &OsStr) -> bool {
+    ext.to_str()
+        .map_or(false, |ext| "xml".eq_ignore_ascii_case(ext))
 }
 
 fn get_out_file<G>(path: &Option<PathBuf>, var_os: G) -> Result<impl Write>
