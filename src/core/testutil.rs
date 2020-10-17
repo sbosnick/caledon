@@ -165,7 +165,7 @@ pub struct FdPasser {}
 impl Interface for FdPasser {
     type Requests = Requests;
     type Events = Events;
-    type InterfaceList = BuildTimeWaylandTests;
+    type Protocol = BuildTimeWaylandTests;
 }
 
 pub enum BuildTimeWaylandTests {
@@ -186,7 +186,7 @@ impl TryFrom<BuildTimeWaylandTests> for FdPasser {
     }
 }
 impl Protocol for BuildTimeWaylandTests {
-    type ProtocolList = Protocols;
+    type ProtocolFamily = Protocols;
 }
 
 pub enum Protocols {

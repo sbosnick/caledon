@@ -84,7 +84,7 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
             }
 
             impl Protocol for #protocol_ident {
-                type ProtocolList = super::Protocols;
+                type ProtocolFamily = super::Protocols;
             }
 
             impl From<#protocol_ident> for super::Protocols {
@@ -162,7 +162,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
         impl Interface for #interface_ident {
             type Requests = #mod_ident::Requests;
             type Events = #mod_ident::Events;
-            type InterfaceList = #interface_list;
+            type Protocol = #interface_list;
         }
 
         impl From<#interface_ident> for #interface_list {

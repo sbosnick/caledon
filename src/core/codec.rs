@@ -86,7 +86,7 @@ where
     MessageToInterface<T>: Interface<Events = T::MessageList>,
 
     P: ProtocolFamily + From<MessageToProtocol<T>> + TryInto<MessageToProtocol<T>>,
-    MessageToProtocol<T>: Protocol<ProtocolList = P>,
+    MessageToProtocol<T>: Protocol<ProtocolFamily= P>,
 {
     type Error = CodecError;
 
@@ -101,7 +101,7 @@ where
     MessageToInterface<T>: Interface<Requests = T::MessageList>,
 
     P: ProtocolFamily + From<MessageToProtocol<T>> + TryInto<MessageToProtocol<T>>,
-    MessageToProtocol<T>: Protocol<ProtocolList = P>,
+    MessageToProtocol<T>: Protocol<ProtocolFamily= P>,
 {
     type Error = CodecError;
 

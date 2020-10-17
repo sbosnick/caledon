@@ -135,9 +135,8 @@ pub trait Interface: Sized {
     /// The list of event message for this `Interface`.
     type Events: MessageList;
 
-    /// The interface list to which this interface belongs. This indirectly
-    /// identifies the protocol to which this interface belong.
-    type InterfaceList: Protocol + From<Self> + TryInto<Self>;
+    /// The protocol to which this interface belongs.
+    type Protocol: Protocol + From<Self> + TryInto<Self>;
 }
 
 /// The [Wayland] wire protocol representation of a [Wayland] (higher-level) protocol.
@@ -148,9 +147,8 @@ pub trait Interface: Sized {
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait Protocol: Sized {
-    /// The protocol list to which this protocol belongs. This indirectly identifies
-    /// the protocol family to which this protocol belongs.
-    type ProtocolList: ProtocolFamily + From<Self> + TryInto<Self>;
+    /// The protocol family to which this protocol belongs.
+    type ProtocolFamily: ProtocolFamily + From<Self> + TryInto<Self>;
 }
 
 /// A family of [Wayland] protocols.
@@ -175,7 +173,7 @@ pub trait ProtocolFamily {}
 type MessageToInterface<T> = <<T as Message>::MessageList as MessageList>::Interface;
 
 // Utility to convert a Message type to the Protocol type to which its Interface belongs.
-type MessageToProtocol<T> = <MessageToInterface<T> as Interface>::InterfaceList;
+type MessageToProtocol<T> = <MessageToInterface<T> as Interface>::Protocol;
 
 // === impl Fd ===
 
