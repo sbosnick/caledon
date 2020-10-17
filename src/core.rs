@@ -167,7 +167,6 @@ pub trait Protocol: Sized {
     type ProtocolList: ProtocolFamily + From<Self> + TryInto<Self>;
 }
 
-
 /// A family of [Wayland] protocols.
 ///
 /// A `ProtocolFamily` will typically be an `enum` with each protocol for the protocol
@@ -182,7 +181,7 @@ pub trait Protocol: Sized {
 /// [Wayland] protocol XML files.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub trait ProtocolFamily { }
+pub trait ProtocolFamily {}
 
 // === impl Fd ===
 

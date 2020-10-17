@@ -6,12 +6,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
-use std::{ffi::{self, CString}, convert::TryInto};
 use std::fmt::Debug;
 use std::io;
 use std::marker::PhantomData;
 use std::mem;
 use std::u16;
+use std::{
+    convert::TryInto,
+    ffi::{self, CString},
+};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
@@ -568,7 +571,7 @@ mod tests {
 
     use assert_matches::assert_matches;
 
-    use crate::core::testutil::{DestroyRequest, Protocols, PreFdEvent};
+    use crate::core::testutil::{DestroyRequest, PreFdEvent, Protocols};
     use crate::core::{Decimal, Fd, ObjectId};
 
     #[test]

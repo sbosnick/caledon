@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
-use std::{ffi::CString, convert::TryInto};
 use std::fmt::Debug;
 use std::pin::Pin;
+use std::{convert::TryInto, ffi::CString};
 
 use fd_queue::{DequeueFd, EnqueueFd, QueueFullError};
 use futures_core::{
@@ -457,7 +457,7 @@ mod tests {
     use futures_ringbuf::RingBuffer as AsyncRingBuffer;
     use ringbuf::{Consumer, Producer, RingBuffer};
 
-    use crate::core::testutil::{Protocols, FdEvent};
+    use crate::core::testutil::{FdEvent, Protocols};
     use crate::core::{Decimal, Fd, ObjectId};
 
     struct MockQueue(Option<RawFd>);
