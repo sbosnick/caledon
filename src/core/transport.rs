@@ -130,7 +130,7 @@ where
     MessageToInterface<Item>: Interface<Events = Item::MessageList>,
 
     P: ProtocolFamily + From<MessageToProtocol<Item>> + TryInto<MessageToProtocol<Item>>,
-    MessageToProtocol<Item>: Protocol<ProtocolFamily= P>,
+    MessageToProtocol<Item>: Protocol<ProtocolFamily = P>,
     T: AsyncWrite + Unpin + EnqueueFd,
 {
     type Error = TransportError;
@@ -162,7 +162,7 @@ where
     MessageToInterface<Item>: Interface<Requests = Item::MessageList>,
 
     P: ProtocolFamily + From<MessageToProtocol<Item>> + TryInto<MessageToProtocol<Item>>,
-    MessageToProtocol<Item>: Protocol<ProtocolFamily= P>,
+    MessageToProtocol<Item>: Protocol<ProtocolFamily = P>,
     T: AsyncWrite + Unpin + EnqueueFd,
 {
     type Error = TransportError;
