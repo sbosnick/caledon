@@ -21,8 +21,8 @@ use thiserror::Error;
 use tokio_util::codec::{Decoder, Encoder};
 
 use super::{
-    ClientRole, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol, ProtocolFamily,
-    Role, ServerRole, Signature,
+    ClientRole, Interface, Message, MessageToInterface, MessageToProtocol, ObjectId, Protocol,
+    ProtocolFamily, Role, ServerRole, Signature,
 };
 
 // === WaylandCodec ===
@@ -83,13 +83,10 @@ where
 impl<T, P> Encoder<T> for WaylandCodec<ServerRole, P>
 where
     T: Message,
-    <<T as Message>::MessageList as MessageList>::Interface : Interface<
-        Events = T::MessageList,
-    >,
+    MessageToInterface<T>: Interface<Events = T::MessageList>,
 
-    P: ProtocolFamily+From<<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>
-        +TryInto<<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>,
-    <<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol: Protocol<ProtocolList = P>,
+    P: ProtocolFamily + From<MessageToProtocol<T>> + TryInto<MessageToProtocol<T>>,
+    MessageToProtocol<T>: Protocol<ProtocolList = P>,
 {
     type Error = CodecError;
 
@@ -101,13 +98,10 @@ where
 impl<T, P> Encoder<T> for WaylandCodec<ClientRole, P>
 where
     T: Message,
-    <<T as Message>::MessageList as MessageList>::Interface : Interface<
-        Requests = T::MessageList,
-    >,
+    MessageToInterface<T>: Interface<Requests = T::MessageList>,
 
-    P: ProtocolFamily+From<<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>
-        +TryInto<<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>,
-    <<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol: Protocol<ProtocolList = P>,
+    P: ProtocolFamily + From<MessageToProtocol<T>> + TryInto<MessageToProtocol<T>>,
+    MessageToProtocol<T>: Protocol<ProtocolList = P>,
 {
     type Error = CodecError;
 

@@ -21,9 +21,9 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Decoder, Framed};
 
-use super::codec::{self, CodecError, WaylandCodec};
 use super::{
-    ClientRole, Fd, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol,
+    codec::{self, CodecError, WaylandCodec},
+    ClientRole, Fd, Interface, Message, MessageToInterface, MessageToProtocol, ObjectId, Protocol,
     ProtocolFamily, ServerRole, Signature,
 };
 
@@ -124,17 +124,14 @@ where
     }
 }
 
-impl<T,P, M, Item> Sink<Item> for WaylandTransport<T,ServerRole,P, M>
+impl<T, P, M, Item> Sink<Item> for WaylandTransport<T, ServerRole, P, M>
 where
     Item: Message,
-    <<Item as Message>::MessageList as MessageList>::Interface : Interface<
-        Events = Item::MessageList,
-    >,
+    MessageToInterface<Item>: Interface<Events = Item::MessageList>,
 
-    P: ProtocolFamily+From<<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>
-        +TryInto<<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>,
-    <<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol: Protocol<ProtocolList = P>,
-    T: AsyncWrite+Unpin+EnqueueFd,
+    P: ProtocolFamily + From<MessageToProtocol<Item>> + TryInto<MessageToProtocol<Item>>,
+    MessageToProtocol<Item>: Protocol<ProtocolList = P>,
+    T: AsyncWrite + Unpin + EnqueueFd,
 {
     type Error = TransportError;
 
@@ -157,20 +154,16 @@ where
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         Sink::<Item>::poll_close(self.project().inner, cx).map_err(|e| e.into())
     }
-
 }
 
-impl<T, P, M, Item> Sink<Item> for WaylandTransport<T,ClientRole,P, M>
+impl<T, P, M, Item> Sink<Item> for WaylandTransport<T, ClientRole, P, M>
 where
     Item: Message,
-    <<Item as Message>::MessageList as MessageList>::Interface : Interface<
-        Requests = Item::MessageList,
-    >,
+    MessageToInterface<Item>: Interface<Requests = Item::MessageList>,
 
-    P: ProtocolFamily+From<<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>
-        +TryInto<<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>,
-    <<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol: Protocol<ProtocolList = P>,
-    T: AsyncWrite+Unpin+EnqueueFd,
+    P: ProtocolFamily + From<MessageToProtocol<Item>> + TryInto<MessageToProtocol<Item>>,
+    MessageToProtocol<Item>: Protocol<ProtocolList = P>,
+    T: AsyncWrite + Unpin + EnqueueFd,
 {
     type Error = TransportError;
 
@@ -193,7 +186,6 @@ where
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         Sink::<Item>::poll_close(self.project().inner, cx).map_err(|e| e.into())
     }
-
 }
 
 // === DispatchMessage ===

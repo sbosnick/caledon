@@ -183,6 +183,15 @@ pub trait Protocol: Sized {
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait ProtocolFamily {}
 
+// == type alaises ==
+
+// Utility to convert a Message type to the Interface type to which it belongs.
+type MessageToInterface<T> = <<T as Message>::MessageList as MessageList>::Interface;
+
+// Utility to convert a Message type to the Protocol type to which its Interface belongs.
+type MessageToProtocol<T> =
+    <<MessageToInterface<T> as Interface>::InterfaceList as InterfaceList>::Protocol;
+
 // === impl Fd ===
 
 impl AsRawFd for &Fd {
