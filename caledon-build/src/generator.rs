@@ -95,19 +95,27 @@ impl Generator {
     }
 
     fn get_directory(&self) -> Result<fs::ReadDir> {
+        // false positive: env::var_os has too general a type to be passed directly
+        #[allow(clippy::redundant_closure)]
         get_directory(&self.directory, |k| env::var_os(k))
     }
 
     fn get_directory_path(&self) -> Result<PathBuf> {
+        // false positive: env::var_os has too general a type to be passed directly
+        #[allow(clippy::redundant_closure)]
         get_directory_path(&self.directory, |k| env::var_os(k))
     }
 
     fn get_out_file(&self) -> Result<impl Write> {
+        // false positive: env::var_os has too general a type to be passed directly
+        #[allow(clippy::redundant_closure)]
         get_out_file(&self.out_file, |k| env::var_os(k))
     }
 
     fn run_rustfmt(&self) -> Result<()> {
         if !self.disable_rustfmt {
+            // false positive: env::var_os has too general a type to be passed directly
+            #[allow(clippy::redundant_closure)]
             run_rustfmt(&self.out_file, |k| env::var_os(k))?;
         }
         Ok(())

@@ -76,6 +76,7 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
         .map(|i| generate_interface(i, &interfaces_ident));
 
     quote! {
+        #[allow(clippy::too_many_arguments)]
         #[doc = #mod_doc]
         pub mod #mod_ident {
             use std::convert::TryFrom;
