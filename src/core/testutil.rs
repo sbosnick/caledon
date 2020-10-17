@@ -9,8 +9,7 @@
 use std::convert::TryFrom;
 
 use super::{
-    ConversionError, Fd, Interface, Message, MessageList, ObjectId, Protocol,
-    ProtocolFamily,
+    ConversionError, Fd, Interface, Message, MessageList, ObjectId, Protocol, ProtocolFamily,
 };
 
 // These types are a manual implementation of the "build_time_wayland_tests" protocol from the
