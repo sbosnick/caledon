@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
-use std::ffi::{self, CString};
+use std::{ffi::{self, CString}, convert::TryInto};
 use std::fmt::Debug;
 use std::io;
 use std::marker::PhantomData;
@@ -19,7 +19,7 @@ use tokio_util::codec::{Decoder, Encoder};
 
 use super::{
     ClientRole, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol, ProtocolFamily,
-    ProtocolList, Role, ServerRole, Signature,
+    Role, ServerRole, Signature,
 };
 
 // === WaylandCodec ===
@@ -84,10 +84,9 @@ where
         Events = T::MessageList,
     >,
 
-    P: ProtocolFamily,
-    <<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol as Protocol>::ProtocolList : ProtocolList<
-        ProtocolFamily = P,
-    >,
+    P: ProtocolFamily+From<<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>
+        +TryInto<<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>,
+    <<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol: Protocol<ProtocolList = P>,
 {
     type Error = CodecError;
 
@@ -103,10 +102,9 @@ where
         Requests = T::MessageList,
     >,
 
-    P: ProtocolFamily,
-    <<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol as Protocol>::ProtocolList : ProtocolList<
-        ProtocolFamily = P,
-    >,
+    P: ProtocolFamily+From<<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>
+        +TryInto<<<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>,
+    <<<<T as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol: Protocol<ProtocolList = P>,
 {
     type Error = CodecError;
 
@@ -570,13 +568,13 @@ mod tests {
 
     use assert_matches::assert_matches;
 
-    use crate::core::testutil::{DestroyRequest, Family, PreFdEvent};
+    use crate::core::testutil::{DestroyRequest, Protocols, PreFdEvent};
     use crate::core::{Decimal, Fd, ObjectId};
 
     #[test]
     fn encode_messages_by_role() {
-        let mut server = WaylandCodec::<ServerRole, Family>::default();
-        let mut client = WaylandCodec::<ClientRole, Family>::default();
+        let mut server = WaylandCodec::<ServerRole, Protocols>::default();
+        let mut client = WaylandCodec::<ClientRole, Protocols>::default();
         let mut buffer = BytesMut::new();
 
         client.encode(DestroyRequest {}, &mut buffer).unwrap();
@@ -596,7 +594,7 @@ mod tests {
         };
         let mut buffer = BytesMut::new();
 
-        let mut sut = WaylandCodec::<ClientRole, Family>::default();
+        let mut sut = WaylandCodec::<ClientRole, Protocols>::default();
         sut.encode(DestroyRequest {}, &mut buffer).unwrap();
 
         assert_eq!(buffer, &expected.as_ref());
@@ -839,7 +837,7 @@ mod tests {
     fn decode_header_without_enough_wants_more() {
         let mut buf: BytesMut = [0x01u8, 0x00, 0x00, 0x00].as_ref().into();
 
-        let mut sut = WaylandCodec::<ServerRole, Family>::default();
+        let mut sut = WaylandCodec::<ServerRole, Protocols>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -849,7 +847,7 @@ mod tests {
     fn decode_empty_header_wants_more() {
         let mut buf = BytesMut::new();
 
-        let mut sut = WaylandCodec::<ServerRole, Family>::default();
+        let mut sut = WaylandCodec::<ServerRole, Protocols>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -864,7 +862,7 @@ mod tests {
         };
         let mut buf: BytesMut = array.as_ref().into();
 
-        let mut sut = WaylandCodec::<ServerRole, Family>::default();
+        let mut sut = WaylandCodec::<ServerRole, Protocols>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(Some(msg)) => {
@@ -883,7 +881,7 @@ mod tests {
         };
         let mut buf: BytesMut = array.as_ref().into();
 
-        let mut sut = WaylandCodec::<ServerRole, Family>::default();
+        let mut sut = WaylandCodec::<ServerRole, Protocols>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(None));
@@ -898,7 +896,7 @@ mod tests {
         };
         let mut buf: BytesMut = array.as_ref().into();
 
-        let mut sut = WaylandCodec::<ServerRole, Family>::default();
+        let mut sut = WaylandCodec::<ServerRole, Protocols>::default();
         let result = sut.decode(&mut buf);
 
         assert_matches!(result, Ok(Some(msg)) => {
@@ -922,7 +920,7 @@ mod tests {
         };
         let mut buf: BytesMut = array.as_ref().into();
 
-        let mut sut = WaylandCodec::<ServerRole, Family>::default();
+        let mut sut = WaylandCodec::<ServerRole, Protocols>::default();
         let _ = sut.decode(&mut buf);
         let result = sut.decode(&mut buf);
 

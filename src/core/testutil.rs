@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 
 use super::{
     ConversionError, Fd, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol,
-    ProtocolFamily, ProtocolList,
+    ProtocolFamily, 
 };
 
 // These types are a manual implementation of the "build_time_wayland_tests" protocol from the
@@ -199,9 +199,7 @@ impl Protocol for BuildTimeWaylandTests {
 pub enum Protocols {
     BuildTimeWaylandTests(BuildTimeWaylandTests),
 }
-impl ProtocolList for Protocols {
-    type ProtocolFamily = Family;
-}
+impl ProtocolFamily for Protocols { }
 impl From<BuildTimeWaylandTests> for Protocols {
     fn from(b: BuildTimeWaylandTests) -> Self {
         Protocols::BuildTimeWaylandTests(b)
@@ -215,9 +213,4 @@ impl TryFrom<Protocols> for BuildTimeWaylandTests {
             Protocols::BuildTimeWaylandTests(b) => Ok(b),
         }
     }
-}
-
-pub struct Family {}
-impl ProtocolFamily for Family {
-    type Protocols = Protocols;
 }

@@ -164,26 +164,15 @@ pub trait Protocol: Sized {
 
     /// The protocol list to which this protocol belongs. This indirectly identifies
     /// the protocol family to which this protocol belongs.
-    type ProtocolList: ProtocolList + From<Self> + TryInto<Self>;
+    type ProtocolList: ProtocolFamily + From<Self> + TryInto<Self>;
 }
 
-/// A list of [Wayland] protocols associated with a particular protocol family.
-///
-/// A `ProtocolList` will typically be an `enum` with each protocol for the protocol
-/// family associated with one variant of the `enum`. It will typically be generated
-/// when proccessing a collection of [Wayland] protocol XML files.
-///
-/// `ProtocolList` does not correspondece directly a concept in the [Wayland]
-/// protocol but rather is a way of modeling operation on multiple protocols in a
-/// unified manner.
-///
-/// [Wayland]: https://wayland.freedesktop.org/
-pub trait ProtocolList {
-    /// The protocol family with which this `ProtocolList` is associated.
-    type ProtocolFamily: ProtocolFamily;
-}
 
 /// A family of [Wayland] protocols.
+///
+/// A `ProtocolFamily` will typically be an `enum` with each protocol for the protocol
+/// family associated with one variant of the `enum`. It will typically be generated
+/// when proccessing a collection of [Wayland] protocol XML files.
 ///
 /// A `ProtocolFamily` is a Rust specific concept that does not correspond directly
 /// to a [Wayland] concept. It allows other code to operate on a collection of
@@ -193,10 +182,7 @@ pub trait ProtocolList {
 /// [Wayland] protocol XML files.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub trait ProtocolFamily {
-    /// The protocols associated with this `ProtocolFamily`.
-    type Protocols: ProtocolList;
-}
+pub trait ProtocolFamily { }
 
 // === impl Fd ===
 

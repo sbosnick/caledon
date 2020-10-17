@@ -36,23 +36,14 @@ where
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
-        use crate::core::{ProtocolFamily, ProtocolList};
-
-        #[doc = "The family of protocols implement by caledon."]
-        pub struct Family;
-
-        impl ProtocolFamily for Family {
-            type Protocols = Protocols;
-        }
+        use crate::core::ProtocolFamily;
 
         #[doc = "The list of protocols implemented by caledon."]
         pub enum Protocols {
             #(#entries,)*
         }
 
-        impl ProtocolList for Protocols {
-            type ProtocolFamily = Family;
-        }
+        impl ProtocolFamily for Protocols { }
 
         #(#modules)*
     };

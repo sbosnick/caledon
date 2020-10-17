@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
-use std::ffi::CString;
+use std::{ffi::CString, convert::TryInto};
 use std::fmt::Debug;
 use std::pin::Pin;
 
@@ -24,7 +24,7 @@ use tokio_util::codec::{Decoder, Framed};
 use super::codec::{self, CodecError, WaylandCodec};
 use super::{
     ClientRole, Fd, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol,
-    ProtocolFamily, ProtocolList, ServerRole, Signature,
+    ProtocolFamily, ServerRole, Signature,
 };
 
 // === WaylandTransport ===
@@ -131,10 +131,9 @@ where
         Events = Item::MessageList,
     >,
 
-    P: ProtocolFamily,
-    <<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol as Protocol>::ProtocolList : ProtocolList<
-        ProtocolFamily = P,
-    >,
+    P: ProtocolFamily+From<<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>
+        +TryInto<<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>,
+    <<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol: Protocol<ProtocolList = P>,
     T: AsyncWrite+Unpin+EnqueueFd,
 {
     type Error = TransportError;
@@ -168,10 +167,9 @@ where
         Requests = Item::MessageList,
     >,
 
-    P: ProtocolFamily,
-    <<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol as Protocol>::ProtocolList : ProtocolList<
-        ProtocolFamily = P,
-    >,
+    P: ProtocolFamily+From<<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>
+        +TryInto<<<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol>,
+    <<<<Item as Message>::MessageList as MessageList>::Interface as Interface>::InterfaceList as InterfaceList>::Protocol: Protocol<ProtocolList = P>,
     T: AsyncWrite+Unpin+EnqueueFd,
 {
     type Error = TransportError;
@@ -459,7 +457,7 @@ mod tests {
     use futures_ringbuf::RingBuffer as AsyncRingBuffer;
     use ringbuf::{Consumer, Producer, RingBuffer};
 
-    use crate::core::testutil::{Family, FdEvent};
+    use crate::core::testutil::{Protocols, FdEvent};
     use crate::core::{Decimal, Fd, ObjectId};
 
     struct MockQueue(Option<RawFd>);
@@ -660,7 +658,7 @@ mod tests {
         let endpoint = FakeEndpoint::default();
         let message = FdEvent::new(ObjectId(2), Fd(4));
 
-        let mut sut = WaylandTransport::<_, ServerRole, Family, _>::new(endpoint, ());
+        let mut sut = WaylandTransport::<_, ServerRole, Protocols, _>::new(endpoint, ());
         block_on(sut.send(message)).expect("Unable to send message.");
 
         assert!(!sut.inner.get_ref().consumer.is_empty());
@@ -672,7 +670,7 @@ mod tests {
         let message = FdEvent::new(ObjectId(2), Fd(4));
         let map = FakeMessageFdMap::new(true);
 
-        let mut sut = WaylandTransport::<_, ServerRole, Family, _>::new(endpoint, map);
+        let mut sut = WaylandTransport::<_, ServerRole, Protocols, _>::new(endpoint, map);
         block_on(sut.send(message)).expect("Unable to send message.");
         let result = block_on(sut.next());
 
@@ -686,7 +684,7 @@ mod tests {
         let message = FdEvent::new(ObjectId(2), Fd(expected_fd));
         let map = FakeMessageFdMap::new(true);
 
-        let mut sut = WaylandTransport::<_, ServerRole, Family, _>::new(endpoint, map);
+        let mut sut = WaylandTransport::<_, ServerRole, Protocols, _>::new(endpoint, map);
         block_on(sut.send(message)).expect("Unable to send message.");
         let mut msg = block_on(sut.next()).unwrap().unwrap();
         let args = msg.extract_args::<<FdEvent as Message>::Signature>();
