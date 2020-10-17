@@ -54,17 +54,15 @@ where
 fn generate_protocol(protocol: &Protocol) -> TokenStream {
     let mod_ident = protocol.mod_ident();
     let protocol_ident = protocol.protocol_ident();
-    let interfaces_ident = protocol.interfaces_ident();
     let enum_entry_ident = protocol.enum_entry_ident();
     let mod_doc = format_long_doc(protocol, |name| {
         format!("Caledon types for the {} protocol.", name)
     });
     let protocol_doc = format!("The {} protocol.", protocol.name());
-    let interfaces_doc = format!("The interfaces of the {} protocol.", protocol.name());
     let entries = protocol.interfaces().map(generate_interface_entry);
     let interfaces = protocol
         .interfaces()
-        .map(|i| generate_interface(i, &interfaces_ident));
+        .map(|i| generate_interface(i, &protocol_ident));
 
     quote! {
         #[allow(clippy::too_many_arguments)]
@@ -75,17 +73,17 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
             #[allow(unused_imports)]
             use std::ffi::CString;
 
-            use crate::core::{Interface, InterfaceList, ObjectId, Protocol};
+            use crate::core::{Interface, ObjectId, Protocol};
 
             #[allow(unused_imports)]
             use crate::core::{Decimal, Fd};
 
             #[doc = #protocol_doc]
-            pub struct #protocol_ident;
+            pub enum #protocol_ident {
+                #(#entries,)*
+            }
 
             impl Protocol for #protocol_ident {
-                type Interfaces = #interfaces_ident;
-
                 type ProtocolList = super::Protocols;
             }
 
@@ -105,15 +103,6 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
                         _ => Err(crate::core::ConversionError::protocol()),
                     }
                 }
-            }
-
-            #[doc = #interfaces_doc]
-            pub enum #interfaces_ident {
-                #(#entries,)*
-            }
-
-            impl InterfaceList for #interfaces_ident {
-                type Protocol = #protocol_ident;
             }
 
             #(#interfaces)*

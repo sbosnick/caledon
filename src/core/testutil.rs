@@ -9,7 +9,7 @@
 use std::convert::TryFrom;
 
 use super::{
-    ConversionError, Fd, Interface, InterfaceList, Message, MessageList, ObjectId, Protocol,
+    ConversionError, Fd, Interface, Message, MessageList, ObjectId, Protocol,
     ProtocolFamily,
 };
 
@@ -166,33 +166,27 @@ pub struct FdPasser {}
 impl Interface for FdPasser {
     type Requests = Requests;
     type Events = Events;
-    type InterfaceList = Interfaces;
+    type InterfaceList = BuildTimeWaylandTests;
 }
 
-pub enum Interfaces {
+pub enum BuildTimeWaylandTests {
     FdPasser(FdPasser),
 }
-impl InterfaceList for Interfaces {
-    type Protocol = BuildTimeWaylandTests;
-}
-impl From<FdPasser> for Interfaces {
+impl From<FdPasser> for BuildTimeWaylandTests {
     fn from(f: FdPasser) -> Self {
-        Interfaces::FdPasser(f)
+        Self::FdPasser(f)
     }
 }
-impl TryFrom<Interfaces> for FdPasser {
+impl TryFrom<BuildTimeWaylandTests> for FdPasser {
     type Error = ();
 
-    fn try_from(i: Interfaces) -> Result<Self, Self::Error> {
+    fn try_from(i: BuildTimeWaylandTests) -> Result<Self, Self::Error> {
         match i {
-            Interfaces::FdPasser(f) => Ok(f),
+            BuildTimeWaylandTests::FdPasser(f) => Ok(f),
         }
     }
 }
-
-pub struct BuildTimeWaylandTests {}
 impl Protocol for BuildTimeWaylandTests {
-    type Interfaces = Interfaces;
     type ProtocolList = Protocols;
 }
 

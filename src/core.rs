@@ -137,31 +137,17 @@ pub trait Interface: Sized {
 
     /// The interface list to which this interface belongs. This indirectly
     /// identifies the protocol to which this interface belong.
-    type InterfaceList: InterfaceList + From<Self> + TryInto<Self>;
-}
-
-/// A list of [Wayland] interfaces associated with a particular protocol.
-///
-/// An `InterfaceList` will typically be an `enum` with each interface for a given
-/// protocol associated with one variant of the `enum`. It will typically be
-/// generated from one of the [Wayland] protocol XML files.
-///
-/// [Wayland]: https://wayland.freedesktop.org/
-pub trait InterfaceList {
-    /// The protocol with which this `InterfaceList` is associated.
-    type Protocol: Protocol;
+    type InterfaceList: Protocol + From<Self> + TryInto<Self>;
 }
 
 /// The [Wayland] wire protocol representation of a [Wayland] (higher-level) protocol.
 ///
-/// A `Protocol` will typically be generated from a single [Wayland] protocol XML
-/// file and consists of a list of the interfaces that make up that protocol.
+/// A `Protocol` will typically be an `enum` with each interface for a given
+/// protocol associated with one variant of the `enum`. It will typically be
+/// generated from one of the [Wayland] protocol XML files.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait Protocol: Sized {
-    /// The interfaces that make up this `Protocol`.
-    type Interfaces: InterfaceList;
-
     /// The protocol list to which this protocol belongs. This indirectly identifies
     /// the protocol family to which this protocol belongs.
     type ProtocolList: ProtocolFamily + From<Self> + TryInto<Self>;
@@ -189,8 +175,7 @@ pub trait ProtocolFamily {}
 type MessageToInterface<T> = <<T as Message>::MessageList as MessageList>::Interface;
 
 // Utility to convert a Message type to the Protocol type to which its Interface belongs.
-type MessageToProtocol<T> =
-    <<MessageToInterface<T> as Interface>::InterfaceList as InterfaceList>::Protocol;
+type MessageToProtocol<T> = <MessageToInterface<T> as Interface>::InterfaceList;
 
 // === impl Fd ===
 

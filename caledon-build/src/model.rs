@@ -191,9 +191,9 @@ impl Protocol {
         format_ident!("{}Protocol", self.name.to_class_case())
     }
 
-    pub fn interfaces_ident(&self) -> Ident {
-        format_ident!("{}Interfaces", self.name.to_class_case())
-    }
+    // pub fn interfaces_ident(&self) -> Ident {
+    //     format_ident!("{}Interfaces", self.name.to_class_case())
+    // }
 
     pub fn enum_entry_ident(&self) -> Ident {
         format_ident!("{}", self.name.to_class_case())
