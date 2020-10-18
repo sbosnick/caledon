@@ -167,13 +167,54 @@ pub trait Protocol: Sized {
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait ProtocolFamily {}
 
-// == type alaises ==
+// === type alaises and utility traits ===
 
 // Utility to convert a Message type to the Interface type to which it belongs.
+// The dead_code warning is a false positive because the type alais is used in
+// the generic trait impl below.
+#[allow(dead_code)]
 type MessageToInterface<T> = <<T as Message>::MessageList as MessageList>::Interface;
 
 // Utility to convert a Message type to the Protocol type to which its Interface belongs.
+// The dead_code warning is a false positive because the type alais is used in
+// the generic trait impl below.
+#[allow(dead_code)]
 type MessageToProtocol<T> = <MessageToInterface<T> as Interface>::Protocol;
+
+// Used as a trait bound to enusure a particular message is an event. Should
+// not be implemented directly but rather rely on the generic impl below.
+trait EventMessage {}
+
+impl<T> EventMessage for T
+where
+    T: Message,
+    MessageToInterface<T>: Interface<Events = T::MessageList>,
+{
+}
+
+// Used as a trait bound to enusure a particular message is a request. Should
+// not be implemented directly but rather rely on the generic impl below.
+trait RequestMessage {}
+
+impl<T> RequestMessage for T
+where
+    T: Message,
+    MessageToInterface<T>: Interface<Requests = T::MessageList>,
+{
+}
+
+// Used as a trait bound to ensure that a particular message comes from an
+// interface from a protocol in a particular protocol family. Should not be
+// implemented direct but rather rely on the generic impl below.
+trait ProtocolFamilyMessage<P> {}
+
+impl<T, P> ProtocolFamilyMessage<P> for T
+where
+    T: Message,
+    P: ProtocolFamily + From<MessageToProtocol<T>> + TryInto<MessageToProtocol<T>>,
+    MessageToProtocol<T>: Protocol<ProtocolFamily = P>,
+{
+}
 
 // === impl Fd ===
 

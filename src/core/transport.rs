@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
+use std::ffi::CString;
 use std::fmt::Debug;
 use std::pin::Pin;
-use std::{convert::TryInto, ffi::CString};
 
 use fd_queue::{DequeueFd, EnqueueFd, QueueFullError};
 use futures_core::{
@@ -23,8 +23,8 @@ use tokio_util::codec::{Decoder, Framed};
 
 use super::{
     codec::{self, CodecError, WaylandCodec},
-    ClientRole, Fd, Interface, Message, MessageToInterface, MessageToProtocol, ObjectId, Protocol,
-    ProtocolFamily, ServerRole, Signature,
+    ClientRole, EventMessage, Fd, Message, ObjectId, ProtocolFamily, ProtocolFamilyMessage,
+    RequestMessage, ServerRole, Signature,
 };
 
 // === WaylandTransport ===
@@ -126,11 +126,8 @@ where
 
 impl<T, P, M, Item> Sink<Item> for WaylandTransport<T, ServerRole, P, M>
 where
-    Item: Message,
-    MessageToInterface<Item>: Interface<Events = Item::MessageList>,
-
-    P: ProtocolFamily + From<MessageToProtocol<Item>> + TryInto<MessageToProtocol<Item>>,
-    MessageToProtocol<Item>: Protocol<ProtocolFamily = P>,
+    Item: Message + EventMessage + ProtocolFamilyMessage<P>,
+    P: ProtocolFamily,
     T: AsyncWrite + Unpin + EnqueueFd,
 {
     type Error = TransportError;
@@ -158,11 +155,8 @@ where
 
 impl<T, P, M, Item> Sink<Item> for WaylandTransport<T, ClientRole, P, M>
 where
-    Item: Message,
-    MessageToInterface<Item>: Interface<Requests = Item::MessageList>,
-
-    P: ProtocolFamily + From<MessageToProtocol<Item>> + TryInto<MessageToProtocol<Item>>,
-    MessageToProtocol<Item>: Protocol<ProtocolFamily = P>,
+    Item: Message + RequestMessage + ProtocolFamilyMessage<P>,
+    P: ProtocolFamily,
     T: AsyncWrite + Unpin + EnqueueFd,
 {
     type Error = TransportError;

@@ -6,23 +6,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
+use std::ffi::{self, CString};
 use std::fmt::Debug;
 use std::io;
 use std::marker::PhantomData;
 use std::mem;
 use std::u16;
-use std::{
-    convert::TryInto,
-    ffi::{self, CString},
-};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::{Decoder, Encoder};
 
 use super::{
-    ClientRole, Interface, Message, MessageToInterface, MessageToProtocol, ObjectId, Protocol,
-    ProtocolFamily, Role, ServerRole, Signature,
+    ClientRole, EventMessage, Message, ObjectId, ProtocolFamily, ProtocolFamilyMessage,
+    RequestMessage, Role, ServerRole, Signature,
 };
 
 // === WaylandCodec ===
@@ -82,11 +79,8 @@ where
 
 impl<T, P> Encoder<T> for WaylandCodec<ServerRole, P>
 where
-    T: Message,
-    MessageToInterface<T>: Interface<Events = T::MessageList>,
-
-    P: ProtocolFamily + From<MessageToProtocol<T>> + TryInto<MessageToProtocol<T>>,
-    MessageToProtocol<T>: Protocol<ProtocolFamily = P>,
+    T: Message + EventMessage + ProtocolFamilyMessage<P>,
+    P: ProtocolFamily,
 {
     type Error = CodecError;
 
@@ -97,11 +91,8 @@ where
 
 impl<T, P> Encoder<T> for WaylandCodec<ClientRole, P>
 where
-    T: Message,
-    MessageToInterface<T>: Interface<Requests = T::MessageList>,
-
-    P: ProtocolFamily + From<MessageToProtocol<T>> + TryInto<MessageToProtocol<T>>,
-    MessageToProtocol<T>: Protocol<ProtocolFamily = P>,
+    T: Message + RequestMessage + ProtocolFamilyMessage<P>,
+    P: ProtocolFamily,
 {
     type Error = CodecError;
 
@@ -578,8 +569,10 @@ mod tests {
         server.encode(PreFdEvent {}, &mut buffer).unwrap();
 
         // The next 2 lines are compiler errors because of a mismatch between
-        // Client/Server and Event/Requests.  server.encode(DestroyRequest{}, &mut
-        // buffer).unwrap(); client.encode(PreFdEvent{}, &mut buffer).unwrap();
+        // Client/Server and Event/Requests.
+
+        // server.encode(DestroyRequest{}, &mut buffer).unwrap();
+        // client.encode(PreFdEvent{}, &mut buffer).unwrap();
     }
 
     #[test]
