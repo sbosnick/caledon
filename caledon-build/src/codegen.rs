@@ -211,7 +211,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
             impl MessageList for Requests {
                 type Interface = super::#interface_ident;
 
-                #[allow(unused_variables, unused_mut)]
+                #[allow(unused_variables, unused_mut, clippy::match_single_binding)]
                 fn from_opcode<MM: MessageMaker>(opcode: OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>> {
                     let item = match opcode {
                         #(#request_from_opcode_entries)*
@@ -231,7 +231,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
             impl MessageList for Events {
                 type Interface = super::#interface_ident;
 
-                #[allow(unused_variables, unused_mut)]
+                #[allow(unused_variables, unused_mut, clippy::match_single_binding)]
                 fn from_opcode<MM: MessageMaker>(opcode: OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>> {
                     let item = match opcode {
                         #(#event_from_opcode_entries)*

@@ -64,7 +64,7 @@ impl MessageList for Requests {
 
     fn from_opcode<MM>(
         opcode: super::OpCode,
-        mut maker: MM,
+        maker: MM,
     ) -> Result<Self, FromOpcodeError<MM::Error>>
     where
         MM: super::MessageMaker,
@@ -167,7 +167,7 @@ impl MessageList for Events {
 
     fn from_opcode<MM>(
         opcode: super::OpCode,
-        mut maker: MM,
+        maker: MM,
     ) -> Result<Self, FromOpcodeError<MM::Error>>
     where
         MM: super::MessageMaker,

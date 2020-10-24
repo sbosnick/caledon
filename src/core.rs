@@ -157,7 +157,7 @@ pub trait MessageMaker {
     type Error: std::error::Error;
 
     /// Make a new `Message` of the the provided type.
-    fn make<M: Message>(&mut self) -> Result<M, Self::Error>;
+    fn make<M: Message>(self) -> Result<M, Self::Error>;
 }
 
 /// The [Wayland] wire protocol representation of a [Wayland] interface.

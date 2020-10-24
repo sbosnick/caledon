@@ -207,7 +207,7 @@ impl DispatchMessage {
         self.inner.opcode()
     }
 
-    pub fn into_message<M: Message>(&mut self) -> Result<M, TransportError> {
+    pub fn into_message<M: Message>(mut self) -> Result<M, TransportError> {
         let args = self.extract_args::<M::Signature>()?;
         Ok(M::from_signature(self.object_id(), args))
     }
@@ -221,7 +221,7 @@ impl DispatchMessage {
 impl MessageMaker for DispatchMessage {
     type Error = TransportError;
 
-    fn make<M: Message>(&mut self) -> Result<M, Self::Error> {
+    fn make<M: Message>(self) -> Result<M, Self::Error> {
         self.into_message()
     }
 }
