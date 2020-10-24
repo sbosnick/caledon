@@ -18,6 +18,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use thiserror::Error;
 
 mod codec;
+mod dispatch;
 mod transport;
 
 /// An argument type for a [Wayland] message.
