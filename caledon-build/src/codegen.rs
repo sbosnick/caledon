@@ -352,7 +352,6 @@ fn generate_request_from_op_entry((opcode, request): (usize, &Request)) -> Token
         .try_into()
         .expect("too many requests: opcode exceeds u16::MAX");
 
-
     quote! {
         #opcode => maker.make::<#request_ident>().map(|m| m.into())?,
     }
@@ -448,7 +447,6 @@ fn generate_event_from_op_entry((opcode, event): (usize, &Event)) -> TokenStream
     let opcode: u16 = opcode
         .try_into()
         .expect("too many requests: opcode exceeds u16::MAX");
-
 
     quote! {
         #opcode => maker.make::<#event_ident>().map(|m| m.into())?,

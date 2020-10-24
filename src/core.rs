@@ -127,13 +127,15 @@ pub trait MessageList: Sized {
 
     /// Create a new `MessageList` item for the given `OpCode` using the provied
     /// `maker`.
-    fn from_opcode<MM: MessageMaker>(opcode: OpCode, maker: MM) -> Result<Self, FromOpcodeError<MM::Error>>;
+    fn from_opcode<MM: MessageMaker>(
+        opcode: OpCode,
+        maker: MM,
+    ) -> Result<Self, FromOpcodeError<MM::Error>>;
 }
 
 /// The possible errors when creating a `MessageList` item from an `OpCode`.
 #[derive(Debug, Error)]
-pub enum FromOpcodeError<E: 'static + std::error::Error>
-{
+pub enum FromOpcodeError<E: 'static + std::error::Error> {
     /// The error when the provided `MessageMaker` returns an error.
     #[error("Unable to make the required message")]
     MakerError(#[from] E),

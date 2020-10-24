@@ -9,8 +9,9 @@
 use std::convert::TryFrom;
 
 use super::{
-    ConversionError, Fd, Interface, Message, MessageList, ObjectId, Protocol, ProtocolFamily,
-FromOpcodeError};
+    ConversionError, Fd, FromOpcodeError, Interface, Message, MessageList, ObjectId, Protocol,
+    ProtocolFamily,
+};
 
 // These types are a manual implementation of the "build_time_wayland_tests" protocol from the
 // Wayland repository (in the "protocol/tests.xml" file).
@@ -30,7 +31,7 @@ impl Message for DestroyRequest {
     }
 
     fn from_signature(_sender: ObjectId, _args: Self::Signature) -> Self {
-        Self{}
+        Self {}
     }
 }
 
@@ -50,7 +51,7 @@ impl Message for ConjoinRequest {
     }
 
     fn from_signature(_sender: ObjectId, _args: Self::Signature) -> Self {
-        Self{}
+        Self {}
     }
 }
 
@@ -61,7 +62,10 @@ pub enum Requests {
 impl MessageList for Requests {
     type Interface = FdPasser;
 
-    fn from_opcode<MM>(opcode: super::OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>>
+    fn from_opcode<MM>(
+        opcode: super::OpCode,
+        mut maker: MM,
+    ) -> Result<Self, FromOpcodeError<MM::Error>>
     where
         MM: super::MessageMaker,
     {
@@ -120,7 +124,7 @@ impl Message for PreFdEvent {
     }
 
     fn from_signature(_sender: ObjectId, _args: Self::Signature) -> Self {
-        Self{}
+        Self {}
     }
 }
 
@@ -150,7 +154,7 @@ impl Message for FdEvent {
     }
 
     fn from_signature(sender: ObjectId, args: Self::Signature) -> Self {
-        Self{ sender, args }
+        Self { sender, args }
     }
 }
 
@@ -161,7 +165,10 @@ pub enum Events {
 impl MessageList for Events {
     type Interface = FdPasser;
 
-    fn from_opcode<MM>(opcode: super::OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>>
+    fn from_opcode<MM>(
+        opcode: super::OpCode,
+        mut maker: MM,
+    ) -> Result<Self, FromOpcodeError<MM::Error>>
     where
         MM: super::MessageMaker,
     {

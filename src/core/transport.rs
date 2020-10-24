@@ -23,9 +23,9 @@ use tokio_util::codec::{Decoder, Framed};
 
 use super::{
     codec::{self, CodecError, WaylandCodec},
-    ClientRole, EventMessage, Fd, Message, ObjectId, ProtocolFamily, ProtocolFamilyMessage,
-    RequestMessage, ServerRole, Signature,
-MessageMaker};
+    ClientRole, EventMessage, Fd, Message, MessageMaker, ObjectId, ProtocolFamily,
+    ProtocolFamilyMessage, RequestMessage, ServerRole, Signature,
+};
 
 // === WaylandTransport ===
 
