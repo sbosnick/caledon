@@ -136,11 +136,19 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
     let request_factories = interface
         .requests()
         .map(|r| generate_request_factory(r, &mod_ident));
+    let request_from_opcode_entries = interface
+        .requests()
+        .enumerate()
+        .map(generate_request_from_op_entry);
     let event_entries = interface.events().map(generate_event_entry);
     let events = interface.events().enumerate().map(generate_event);
     let event_factories = interface
         .events()
         .map(|e| generate_event_factory(e, &mod_ident));
+    let event_from_opcode_entries = interface
+        .events()
+        .enumerate()
+        .map(generate_event_from_op_entry);
 
     quote! {
         #[doc = #interface_doc]
@@ -190,7 +198,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
             #[allow(unused_imports)]
             use std::ffi::CString;
 
-            use crate::core::{Message, MessageList, ObjectId};
+            use crate::core::{FromOpcodeError, Message, MessageList, MessageMaker, ObjectId, OpCode};
 
             #[allow(unused_imports)]
             use crate::core::{Decimal, Fd};
@@ -202,6 +210,17 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
 
             impl MessageList for Requests {
                 type Interface = super::#interface_ident;
+
+                #[allow(unused_variables, unused_mut)]
+                fn from_opcode<MM: MessageMaker>(opcode: OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>> {
+                    let item = match opcode {
+                        #(#request_from_opcode_entries)*
+                        _ => return Err(FromOpcodeError::InvalidOpcode(opcode)),
+                    };
+
+                    #[allow(unreachable_code)]
+                    Ok(item)
+                }
             }
 
             #[doc = #evt_doc]
@@ -211,7 +230,18 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
 
             impl MessageList for Events {
                 type Interface = super::#interface_ident;
-            }
+
+                #[allow(unused_variables, unused_mut)]
+                fn from_opcode<MM: MessageMaker>(opcode: OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>> {
+                    let item = match opcode {
+                        #(#event_from_opcode_entries)*
+                        _ => return Err(FromOpcodeError::InvalidOpcode(opcode)),
+                    };
+
+                    #[allow(unreachable_code)]
+                    Ok(item)
+                 }
+             }
 
             #(#requests)*
 
@@ -264,6 +294,10 @@ fn generate_request((opcode, request): (usize, &Request)) -> TokenStream {
             fn sender(&self) -> ObjectId {
                 self.sender
             }
+
+            fn from_signature(sender: ObjectId, args: Self::Signature) -> Self {
+                Self { sender, args }
+            }
         }
 
         impl From<#request_ident> for Requests {
@@ -312,6 +346,18 @@ fn generate_request_factory(request: &Request, mod_ident: &Ident) -> TokenStream
     }
 }
 
+fn generate_request_from_op_entry((opcode, request): (usize, &Request)) -> TokenStream {
+    let request_ident = request.request_ident();
+    let opcode: u16 = opcode
+        .try_into()
+        .expect("too many requests: opcode exceeds u16::MAX");
+
+
+    quote! {
+        #opcode => maker.make::<#request_ident>().map(|m| m.into())?,
+    }
+}
+
 fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
     let event_ident = event.event_ident();
     let event_doc = format_long_doc(event, |name| format!("The {} event.", name));
@@ -345,7 +391,11 @@ fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
             fn sender(&self) -> ObjectId {
                 self.sender
             }
-        }
+
+            fn from_signature(sender: ObjectId, args: Self::Signature) -> Self {
+                Self { sender, args }
+            }
+         }
 
         impl From<#event_ident> for Events {
             fn from(e: #event_ident) -> Self {
@@ -390,6 +440,18 @@ fn generate_event_factory(event: &Event, mod_ident: &Ident) -> TokenStream {
         pub fn #factory_name(&self, #(#param_list),*) -> #mod_ident::#event_ident {
             #mod_ident::#event_ident::new(self.id, #(#param_names),*)
         }
+    }
+}
+
+fn generate_event_from_op_entry((opcode, event): (usize, &Event)) -> TokenStream {
+    let event_ident = event.event_ident();
+    let opcode: u16 = opcode
+        .try_into()
+        .expect("too many requests: opcode exceeds u16::MAX");
+
+
+    quote! {
+        #opcode => maker.make::<#event_ident>().map(|m| m.into())?,
     }
 }
 

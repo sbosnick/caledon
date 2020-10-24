@@ -78,6 +78,10 @@ pub struct Fd(RawFd);
 /// [Wayland]: https://wayland.freedesktop.org/
 pub trait Signature: private::SignatureBase {}
 
+/// The opcode for a message. It uniquely identifies the message type within the
+/// message's `MessageList`.
+pub type OpCode = u16;
+
 /// A particular [Wayland] message.
 ///
 /// A type implementing `Message` would typically be generated from one of the
@@ -87,7 +91,7 @@ pub trait Signature: private::SignatureBase {}
 pub trait Message: Sized {
     /// The opcode for this message. It uniquely identifies the message type within
     /// the message's `MessageList`.
-    const OPCODE: u16;
+    const OPCODE: OpCode;
 
     /// The signature of the message, that is, the `Argument`s that form the body of
     /// the message.
@@ -102,6 +106,9 @@ pub trait Message: Sized {
 
     /// The object that is sending the `Message`.
     fn sender(&self) -> ObjectId;
+
+    /// Create a new Message given its sender and arguments.
+    fn from_signature(sender: ObjectId, args: Self::Signature) -> Self;
 }
 
 /// A list of [Wayland] messages associated with a particular interface.
@@ -114,9 +121,35 @@ pub trait Message: Sized {
 /// interface.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub trait MessageList {
+pub trait MessageList: Sized {
     /// The interface with which this `MessageList` is associated.
     type Interface: Interface;
+
+    /// Create a new `MessageList` item for the given `OpCode` using the provied
+    /// `maker`.
+    fn from_opcode<MM: MessageMaker>(opcode: OpCode, maker: MM) -> Result<Self, FromOpcodeError<MM::Error>>;
+}
+
+/// The possible errors when creating a `MessageList` item from an `OpCode`.
+#[derive(Debug, Error)]
+pub enum FromOpcodeError<E: 'static + std::error::Error>
+{
+    /// The error when the provided `MessageMaker` returns an error.
+    #[error("Unable to make the required message")]
+    MakerError(#[from] E),
+
+    /// The error when the provided `OpCode` is not valid for the given `MessageList`.
+    #[error("Invalid opcode: {0}")]
+    InvalidOpcode(OpCode),
+}
+
+/// The interface for a type that is able to make a `Message`.
+pub trait MessageMaker {
+    /// The error type when attepting to make a new `Message`.
+    type Error: std::error::Error;
+
+    /// Make a new `Message` of the the provided type.
+    fn make<M: Message>(&mut self) -> Result<M, Self::Error>;
 }
 
 /// The [Wayland] wire protocol representation of a [Wayland] interface.

@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 
 use super::{
     ConversionError, Fd, Interface, Message, MessageList, ObjectId, Protocol, ProtocolFamily,
-};
+FromOpcodeError};
 
 // These types are a manual implementation of the "build_time_wayland_tests" protocol from the
 // Wayland repository (in the "protocol/tests.xml" file).
@@ -28,6 +28,10 @@ impl Message for DestroyRequest {
     fn sender(&self) -> ObjectId {
         ObjectId(1)
     }
+
+    fn from_signature(_sender: ObjectId, _args: Self::Signature) -> Self {
+        Self{}
+    }
 }
 
 pub struct ConjoinRequest {}
@@ -44,6 +48,10 @@ impl Message for ConjoinRequest {
     fn sender(&self) -> ObjectId {
         ObjectId(1)
     }
+
+    fn from_signature(_sender: ObjectId, _args: Self::Signature) -> Self {
+        Self{}
+    }
 }
 
 pub enum Requests {
@@ -52,6 +60,19 @@ pub enum Requests {
 }
 impl MessageList for Requests {
     type Interface = FdPasser;
+
+    fn from_opcode<MM>(opcode: super::OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>>
+    where
+        MM: super::MessageMaker,
+    {
+        let item = match opcode {
+            0 => maker.make::<DestroyRequest>().map(|m| m.into())?,
+            1 => maker.make::<ConjoinRequest>().map(|m| m.into())?,
+            _ => panic!("Unknown opcode"),
+        };
+
+        Ok(item)
+    }
 }
 impl From<DestroyRequest> for Requests {
     fn from(d: DestroyRequest) -> Self {
@@ -97,6 +118,10 @@ impl Message for PreFdEvent {
     fn sender(&self) -> ObjectId {
         ObjectId(1)
     }
+
+    fn from_signature(_sender: ObjectId, _args: Self::Signature) -> Self {
+        Self{}
+    }
 }
 
 pub struct FdEvent {
@@ -123,6 +148,10 @@ impl Message for FdEvent {
     fn sender(&self) -> ObjectId {
         self.sender
     }
+
+    fn from_signature(sender: ObjectId, args: Self::Signature) -> Self {
+        Self{ sender, args }
+    }
 }
 
 pub enum Events {
@@ -131,6 +160,19 @@ pub enum Events {
 }
 impl MessageList for Events {
     type Interface = FdPasser;
+
+    fn from_opcode<MM>(opcode: super::OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>>
+    where
+        MM: super::MessageMaker,
+    {
+        let item = match opcode {
+            0 => maker.make::<PreFdEvent>().map(|m| m.into())?,
+            1 => maker.make::<FdEvent>().map(|m| m.into())?,
+            _ => panic!("Unknown opcode"),
+        };
+
+        Ok(item)
+    }
 }
 impl From<PreFdEvent> for Events {
     fn from(p: PreFdEvent) -> Self {

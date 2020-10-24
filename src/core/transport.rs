@@ -25,7 +25,7 @@ use super::{
     codec::{self, CodecError, WaylandCodec},
     ClientRole, EventMessage, Fd, Message, ObjectId, ProtocolFamily, ProtocolFamilyMessage,
     RequestMessage, ServerRole, Signature,
-};
+MessageMaker};
 
 // === WaylandTransport ===
 
@@ -197,8 +197,6 @@ impl DispatchMessage {
         DispatchMessage { inner, fd }
     }
 
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn object_id(&self) -> ObjectId {
         self.inner.object_id()
     }
@@ -209,11 +207,22 @@ impl DispatchMessage {
         self.inner.opcode()
     }
 
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
-    pub fn extract_args<S: Signature>(&mut self) -> Result<S, TransportError> {
+    pub fn into_message<M: Message>(&mut self) -> Result<M, TransportError> {
+        let args = self.extract_args::<M::Signature>()?;
+        Ok(M::from_signature(self.object_id(), args))
+    }
+
+    fn extract_args<S: Signature>(&mut self) -> Result<S, TransportError> {
         let args = self.inner.extract_args::<S>()?;
         args.map_fd(&mut self.fd)
+    }
+}
+
+impl MessageMaker for DispatchMessage {
+    type Error = TransportError;
+
+    fn make<M: Message>(&mut self) -> Result<M, Self::Error> {
+        self.into_message()
     }
 }
 
