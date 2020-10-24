@@ -17,12 +17,12 @@ use futures_core::{
 };
 use futures_sink::Sink;
 use pin_project::pin_project;
-use thiserror::Error;
+use snafu::{ResultExt, Snafu};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Decoder, Framed};
 
 use super::{
-    codec::{self, CodecError, WaylandCodec},
+    codec::{self, CodecError as CodecErr, WaylandCodec},
     ClientRole, EventMessage, Fd, Message, MessageMaker, ObjectId, ProtocolFamily,
     ProtocolFamilyMessage, RequestMessage, ServerRole, Signature,
 };
@@ -238,24 +238,25 @@ pub trait MessageFdMap {
 
 // === TransportError ===
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum TransportError {
-    #[error("Transport unable to encode or decode a message: {source}")]
-    CodecError {
-        #[from]
-        source: CodecError,
-    },
+    #[snafu(
+        display("Transport unable to encode or decode a message: {}", source),
+        context(false)
+    )]
+    CodecError { source: CodecErr },
 
-    #[error("Transport unable to enqueue a file descriptor: {source}")]
-    QueueError {
-        #[from]
-        source: QueueFullError,
-    },
+    #[snafu(display("Transport unable to enqueue a file descriptor: {}", source))]
+    QueueError { source: QueueFullError, fd: Fd },
 
-    #[error("Expected file descriptor for opcode {opcode} on {object_id} missing")]
+    #[snafu(display(
+        "Expected file descriptor for opcode {} on {} missing",
+        opcode,
+        object_id
+    ))]
     MissingFd { object_id: ObjectId, opcode: u16 },
 
-    #[error("Internal error: expected file descriptor absent when mapping arguments")]
+    #[snafu(display("Internal error: expected file descriptor absent when mapping arguments"))]
     UnexpectedAbsentFd,
 }
 
@@ -276,7 +277,9 @@ pub trait ArgEnqueueFd {
 
 impl ArgEnqueueFd for super::Fd {
     fn enqueue(&self, queue: &mut impl EnqueueFd) -> Result<(), TransportError> {
-        queue.enqueue(&self).map_err(|e| e.into())
+        queue
+            .enqueue(&self)
+            .context(QueueError { fd: self.clone() })
     }
 }
 

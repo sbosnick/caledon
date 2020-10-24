@@ -215,7 +215,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
                 fn from_opcode<MM: MessageMaker>(opcode: OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>> {
                     let item = match opcode {
                         #(#request_from_opcode_entries)*
-                        _ => return Err(FromOpcodeError::InvalidOpcode(opcode)),
+                        _ => return Err(FromOpcodeError::InvalidOpcode{opcode}),
                     };
 
                     #[allow(unreachable_code)]
@@ -235,7 +235,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
                 fn from_opcode<MM: MessageMaker>(opcode: OpCode, mut maker: MM) -> Result<Self, FromOpcodeError<MM::Error>> {
                     let item = match opcode {
                         #(#event_from_opcode_entries)*
-                        _ => return Err(FromOpcodeError::InvalidOpcode(opcode)),
+                        _ => return Err(FromOpcodeError::InvalidOpcode{opcode}),
                     };
 
                     #[allow(unreachable_code)]

@@ -15,7 +15,7 @@ use std::ffi::CString;
 use std::fmt;
 use std::os::unix::io::{AsRawFd, RawFd};
 
-use thiserror::Error;
+use snafu::Snafu;
 
 mod codec;
 mod dispatch;
@@ -61,7 +61,7 @@ pub struct Decimal(u32);
 ///
 /// This is a new-type warpper around a `RawFd`. We can't use `RawFd` directly
 /// because that is a type alais for `i32` which is already the int `Argument` type.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Fd(RawFd);
 
 /// The signature for a [Wayland] message.
@@ -134,15 +134,21 @@ pub trait MessageList: Sized {
 }
 
 /// The possible errors when creating a `MessageList` item from an `OpCode`.
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum FromOpcodeError<E: 'static + std::error::Error> {
     /// The error when the provided `MessageMaker` returns an error.
-    #[error("Unable to make the required message")]
-    MakerError(#[from] E),
+    #[snafu(display("Unable to make the required message"), context(false))]
+    MakerError {
+        /// The underlying error from the `MessageMaker`.
+        source: E,
+    },
 
     /// The error when the provided `OpCode` is not valid for the given `MessageList`.
-    #[error("Invalid opcode: {0}")]
-    InvalidOpcode(OpCode),
+    #[snafu(display("Invalid opcode: {}", opcode))]
+    InvalidOpcode {
+        /// The invalid `OpCode`.
+        opcode: OpCode,
+    },
 }
 
 /// The interface for a type that is able to make a `Message`.
@@ -304,8 +310,8 @@ tuple_signature_impl! { A B C D E F G H I J K L }
 ///
 /// The three list type for which this error might apply are a `MessageList`, an `InterfaceList`,
 /// and a `ProtocolList`.
-#[derive(Debug, Error)]
-#[error("Unable to convert a {typ} list to a {typ}.")]
+#[derive(Debug, Snafu)]
+#[snafu(display("Unable to convert a {} list to a {}.", typ, typ))]
 pub struct ConversionError {
     typ: ConversionErrorType,
 }

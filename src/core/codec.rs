@@ -14,7 +14,7 @@ use std::mem;
 use std::u16;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use thiserror::Error;
+use snafu::Snafu;
 use tokio_util::codec::{Decoder, Encoder};
 
 use super::{
@@ -242,22 +242,19 @@ impl DispatchMessage {
 
 // === CodecError ===
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum CodecError {
-    #[error("io error: {source}")]
-    Io {
-        #[from]
-        source: io::Error,
-    },
+    #[snafu(display("io error: {}", source), context(false))]
+    Io { source: io::Error },
 
-    #[error("message sent from object {} is too long", object.0)]
+    #[snafu(display("message sent from object {} is too long", object.0))]
     MessageTooLong { object: ObjectId },
 
-    #[error("string argument contained unexpected nul bytes")]
-    InvalidStringArg {
-        #[from]
-        source: ffi::NulError,
-    },
+    #[snafu(
+        display("string argument contained unexpected nul bytes"),
+        context(false)
+    )]
+    InvalidStringArg { source: ffi::NulError },
 }
 
 // === ArgEncoder ===
