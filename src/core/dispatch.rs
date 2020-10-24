@@ -59,8 +59,6 @@ where
     fn dispatch(&self, item: T) -> F;
 }
 
-// TODO: remove this when it is no longer needed
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum DispatchResult<SI> {
     Add(Tag, SI),
