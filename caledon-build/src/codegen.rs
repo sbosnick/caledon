@@ -54,12 +54,18 @@ where
 fn generate_protocol(protocol: &Protocol) -> TokenStream {
     let mod_ident = protocol.mod_ident();
     let protocol_ident = protocol.protocol_ident();
+    let protocol_requests_ident = protocol.protocol_requests_ident();
+    let protocol_events_ident = protocol.protocol_events_ident();
     let enum_entry_ident = protocol.enum_entry_ident();
     let mod_doc = format_long_doc(protocol, |name| {
         format!("Caledon types for the {} protocol.", name)
     });
     let protocol_doc = format!("The {} protocol.", protocol.name());
+    let protocol_requests_doc = format!("The requests for the {} protocol.", protocol.name());
+    let protocol_events_doc = format!("The events for the {} protocol.", protocol.name());
     let entries = protocol.interfaces().map(generate_interface_entry);
+    let request_entries = protocol.interfaces().map(generate_protocol_request_entry);
+    let event_entries = protocol.interfaces().map(generate_protocol_event_entry);
     let interfaces = protocol
         .interfaces()
         .map(|i| generate_interface(i, &protocol_ident));
@@ -73,7 +79,7 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
             #[allow(unused_imports)]
             use std::ffi::CString;
 
-            use crate::core::{Interface, ObjectId, Protocol};
+            use crate::core::{Interface, ObjectId, Protocol, ProtocolMessageList};
 
             #[allow(unused_imports)]
             use crate::core::{Decimal, Fd};
@@ -83,7 +89,20 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
                 #(#entries,)*
             }
 
+            #[doc = #protocol_requests_doc]
+            pub enum #protocol_requests_ident {
+                #(#request_entries,)*
+            }
+
+            #[doc = #protocol_events_doc]
+            pub enum #protocol_events_ident {
+                #(#event_entries,)*
+            }
+
             impl Protocol for #protocol_ident {
+                type Requests = #protocol_requests_ident;
+                type Events = #protocol_events_ident;
+
                 type ProtocolFamily = super::Protocols;
             }
 
@@ -103,6 +122,14 @@ fn generate_protocol(protocol: &Protocol) -> TokenStream {
                         _ => Err(crate::core::ConversionError::protocol()),
                     }
                 }
+            }
+
+            impl ProtocolMessageList for #protocol_requests_ident {
+                type Protocol = #protocol_ident;
+            }
+
+            impl ProtocolMessageList for #protocol_events_ident {
+                type  Protocol = #protocol_ident;
             }
 
             #(#interfaces)*
@@ -258,6 +285,28 @@ fn generate_interface_entry(interface: &Interface) -> TokenStream {
     quote! {
         #[doc = #entry_doc]
         #entry(#interface_ident)
+    }
+}
+
+fn generate_protocol_request_entry(interface: &Interface) -> TokenStream {
+    let entry = interface.enum_entry_ident();
+    let entry_doc = format_short_doc(interface, |name| format!("The requests for the {} interface.", name));
+    let mod_ident = interface.mod_ident();
+
+    quote! {
+        #[doc = #entry_doc]
+        #entry(#mod_ident::Requests)
+    }
+}
+
+fn generate_protocol_event_entry(interface: &Interface) -> TokenStream {
+    let entry = interface.enum_entry_ident();
+    let entry_doc = format_short_doc(interface, |name| format!("The events for the {} interface.", name));
+    let mod_ident = interface.mod_ident();
+
+    quote! {
+        #[doc = #entry_doc]
+        #entry(#mod_ident::Events)
     }
 }
 
