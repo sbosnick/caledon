@@ -177,7 +177,9 @@ fn generate_family_request_entry(protocol: &Protocol) -> TokenStream {
     let entry = protocol.enum_entry_ident();
     let mod_ident = protocol.mod_ident();
     let request_ident = protocol.protocol_requests_ident();
-    let entry_doc = format_short_doc(protocol, |name| format!("The requests for the {} protocol.", name));
+    let entry_doc = format_short_doc(protocol, |name| {
+        format!("The requests for the {} protocol.", name)
+    });
 
     quote! {
         #[doc = #entry_doc]
@@ -189,7 +191,9 @@ fn generate_family_event_entry(protocol: &Protocol) -> TokenStream {
     let entry = protocol.enum_entry_ident();
     let mod_ident = protocol.mod_ident();
     let event_ident = protocol.protocol_events_ident();
-    let entry_doc = format_short_doc(protocol, |name| format!("The events for the {} protocol.", name));
+    let entry_doc = format_short_doc(protocol, |name| {
+        format!("The events for the {} protocol.", name)
+    });
 
     quote! {
         #[doc = #entry_doc]
@@ -338,7 +342,9 @@ fn generate_interface_entry(interface: &Interface) -> TokenStream {
 
 fn generate_protocol_request_entry(interface: &Interface) -> TokenStream {
     let entry = interface.enum_entry_ident();
-    let entry_doc = format_short_doc(interface, |name| format!("The requests for the {} interface.", name));
+    let entry_doc = format_short_doc(interface, |name| {
+        format!("The requests for the {} interface.", name)
+    });
     let mod_ident = interface.mod_ident();
 
     quote! {
@@ -349,7 +355,9 @@ fn generate_protocol_request_entry(interface: &Interface) -> TokenStream {
 
 fn generate_protocol_event_entry(interface: &Interface) -> TokenStream {
     let entry = interface.enum_entry_ident();
-    let entry_doc = format_short_doc(interface, |name| format!("The events for the {} interface.", name));
+    let entry_doc = format_short_doc(interface, |name| {
+        format!("The events for the {} interface.", name)
+    });
     let mod_ident = interface.mod_ident();
 
     quote! {

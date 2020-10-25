@@ -10,8 +10,8 @@ use std::convert::TryFrom;
 
 use super::{
     ConversionError, Fd, FromOpcodeError, Interface, Message, MessageList, ObjectId, Protocol,
-    ProtocolFamily,
-ProtocolMessageList, ProtocolFamilyMessageList};
+    ProtocolFamily, ProtocolFamilyMessageList, ProtocolMessageList,
+};
 
 // These types are a manual implementation of the "build_time_wayland_tests" protocol from the
 // Wayland repository (in the "protocol/tests.xml" file).
@@ -62,10 +62,7 @@ pub enum Requests {
 impl MessageList for Requests {
     type Interface = FdPasser;
 
-    fn from_opcode<MM>(
-        opcode: super::OpCode,
-        maker: MM,
-    ) -> Result<Self, FromOpcodeError<MM::Error>>
+    fn from_opcode<MM>(opcode: super::OpCode, maker: MM) -> Result<Self, FromOpcodeError<MM::Error>>
     where
         MM: super::MessageMaker,
     {
@@ -165,10 +162,7 @@ pub enum Events {
 impl MessageList for Events {
     type Interface = FdPasser;
 
-    fn from_opcode<MM>(
-        opcode: super::OpCode,
-        maker: MM,
-    ) -> Result<Self, FromOpcodeError<MM::Error>>
+    fn from_opcode<MM>(opcode: super::OpCode, maker: MM) -> Result<Self, FromOpcodeError<MM::Error>>
     where
         MM: super::MessageMaker,
     {
@@ -222,11 +216,11 @@ pub enum BuildTimeWaylandTests {
 }
 #[allow(dead_code)]
 pub enum BuildTimeWaylandTestsRequest {
-    FdPasser(Requests)
+    FdPasser(Requests),
 }
 #[allow(dead_code)]
 pub enum BuildTimeWaylandTestsEvents {
-    FdPasser(Events)
+    FdPasser(Events),
 }
 impl From<FdPasser> for BuildTimeWaylandTests {
     fn from(f: FdPasser) -> Self {
@@ -253,7 +247,7 @@ impl ProtocolMessageList for BuildTimeWaylandTestsRequest {
     type Protocol = BuildTimeWaylandTests;
 }
 impl ProtocolMessageList for BuildTimeWaylandTestsEvents {
-    type Protocol =  BuildTimeWaylandTests;
+    type Protocol = BuildTimeWaylandTests;
 }
 
 pub enum Protocols {
@@ -290,5 +284,5 @@ impl ProtocolFamilyMessageList for FamilyRequests {
     type ProtocolFamily = Protocols;
 }
 impl ProtocolFamilyMessageList for FamilyEvents {
-    type  ProtocolFamily = Protocols;
+    type ProtocolFamily = Protocols;
 }
