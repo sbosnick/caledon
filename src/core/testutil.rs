@@ -11,7 +11,7 @@ use std::convert::TryFrom;
 use super::{
     ConversionError, Fd, FromOpcodeError, Interface, Message, MessageList, ObjectId, Protocol,
     ProtocolFamily,
-ProtocolMessageList};
+ProtocolMessageList, ProtocolFamilyMessageList};
 
 // These types are a manual implementation of the "build_time_wayland_tests" protocol from the
 // Wayland repository (in the "protocol/tests.xml" file).
@@ -259,7 +259,19 @@ impl ProtocolMessageList for BuildTimeWaylandTestsEvents {
 pub enum Protocols {
     BuildTimeWaylandTests(BuildTimeWaylandTests),
 }
-impl ProtocolFamily for Protocols {}
+#[allow(dead_code)]
+pub enum FamilyRequests {
+    BuildTimeWaylandTests(BuildTimeWaylandTestsRequest),
+}
+#[allow(dead_code)]
+pub enum FamilyEvents {
+    BuildTimeWaylandTests(BuildTimeWaylandTestsEvents),
+}
+impl ProtocolFamily for Protocols {
+    type Requests = FamilyRequests;
+
+    type Events = FamilyRequests;
+}
 impl From<BuildTimeWaylandTests> for Protocols {
     fn from(b: BuildTimeWaylandTests) -> Self {
         Protocols::BuildTimeWaylandTests(b)
@@ -273,4 +285,10 @@ impl TryFrom<Protocols> for BuildTimeWaylandTests {
             Protocols::BuildTimeWaylandTests(b) => Ok(b),
         }
     }
+}
+impl ProtocolFamilyMessageList for FamilyRequests {
+    type ProtocolFamily = Protocols;
+}
+impl ProtocolFamilyMessageList for FamilyEvents {
+    type  ProtocolFamily = Protocols;
 }

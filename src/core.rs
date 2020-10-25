@@ -187,7 +187,7 @@ pub trait Interface: Sized {
 /// to a `MessageList` for an interface of the protocol. It will typically be
 /// generated from one of the [Wayland] protocol XML files.
 ///
-/// Each ProtocolMessageList will be either the requests or the events for the
+/// Each `ProtocolMessageList` will be either the requests or the events for the
 /// interfaces of a particular protocol.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
@@ -214,6 +214,21 @@ pub trait Protocol: Sized {
     type ProtocolFamily: ProtocolFamily + From<Self> + TryInto<Self>;
 }
 
+/// A collection of [Wayland] messages associated with a `ProtocolFamily`.
+///
+/// A `ProtocolFamilyMessageList` will typically be an enum whose variants correspond
+/// to a `ProtocolMessageList` for a particular protocol. It will typically be
+/// generated from one of the [Wayland] protocol XML files.
+///
+/// Each `ProtocolFamilyMessageList` will be either the requests or the events for
+/// all of the interfaces in all of the protocols in a `ProtocolFamily`.
+///
+/// [Wayland]: https://wayland.freedesktop.org/
+pub trait ProtocolFamilyMessageList {
+    /// The protocol family to which this message list belongs.
+    type ProtocolFamily: ProtocolFamily;
+}
+
 /// A family of [Wayland] protocols.
 ///
 /// A `ProtocolFamily` will typically be an `enum` with each protocol for the protocol
@@ -228,7 +243,13 @@ pub trait Protocol: Sized {
 /// [Wayland] protocol XML files.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub trait ProtocolFamily {}
+pub trait ProtocolFamily {
+    /// A list of the request messages associated with this `ProtocolFamily`.
+    type Requests: ProtocolFamilyMessageList;
+
+    /// A list of the event messages associated with this `ProtocolFamily`.
+    type Events: ProtocolFamilyMessageList;
+}
 
 // === type alaises and utility traits ===
 

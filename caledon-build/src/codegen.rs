@@ -33,17 +33,41 @@ where
     }
 
     let entries = protocols.clone().map(generate_protocol_list_entry);
+    let request_entries = protocols.clone().map(generate_family_request_entry);
+    let event_entries = protocols.clone().map(generate_family_event_entry);
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
-        use crate::core::ProtocolFamily;
+        use crate::core::{ProtocolFamily, ProtocolFamilyMessageList};
 
         #[doc = "The list of protocols implemented by caledon."]
         pub enum Protocols {
             #(#entries,)*
         }
 
-        impl ProtocolFamily for Protocols { }
+        #[doc = "The list of the requests associate with the protocols implemented by caledon."]
+        pub enum Requests {
+            #(#request_entries,)*
+        }
+
+        #[doc = "The list of the events associate with the protocols implemented by caledon."]
+        pub enum Events {
+            #(#event_entries,)*
+        }
+
+        impl ProtocolFamily for Protocols {
+            type Requests = Requests;
+
+            type Events = Events;
+        }
+
+        impl ProtocolFamilyMessageList for Requests {
+            type ProtocolFamily = Protocols;
+        }
+
+        impl ProtocolFamilyMessageList for Events {
+            type  ProtocolFamily = Protocols;
+        }
 
         #(#modules)*
     };
@@ -146,6 +170,30 @@ fn generate_protocol_list_entry(protocol: &Protocol) -> TokenStream {
     quote! {
         #[doc = #entry_doc]
         #entry(#mod_ident::#protocol_ident)
+    }
+}
+
+fn generate_family_request_entry(protocol: &Protocol) -> TokenStream {
+    let entry = protocol.enum_entry_ident();
+    let mod_ident = protocol.mod_ident();
+    let request_ident = protocol.protocol_requests_ident();
+    let entry_doc = format_short_doc(protocol, |name| format!("The requests for the {} protocol.", name));
+
+    quote! {
+        #[doc = #entry_doc]
+        #entry(#mod_ident::#request_ident)
+    }
+}
+
+fn generate_family_event_entry(protocol: &Protocol) -> TokenStream {
+    let entry = protocol.enum_entry_ident();
+    let mod_ident = protocol.mod_ident();
+    let event_ident = protocol.protocol_events_ident();
+    let entry_doc = format_short_doc(protocol, |name| format!("The events for the {} protocol.", name));
+
+    quote! {
+        #[doc = #entry_doc]
+        #entry(#mod_ident::#event_ident)
     }
 }
 
