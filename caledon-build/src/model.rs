@@ -167,6 +167,11 @@ pub trait Args {
     fn args(&self) -> ArgIter;
 }
 
+pub trait Message {
+    fn enum_entry_ident(&self) -> Ident;
+    fn message_ident(&self) -> Ident;
+}
+
 impl Protocol {
     pub fn new(path: impl AsRef<Path>) -> Result<Protocol> {
         let path = path.as_ref();
@@ -259,10 +264,6 @@ impl Documentation for &Interface {
 }
 
 impl Request {
-    pub fn enum_entry_ident(&self) -> Ident {
-        format_ident!("{}", self.name.to_class_case())
-    }
-
     pub fn request_ident(&self) -> Ident {
         format_ident!("{}Request", self.name.to_class_case())
     }
@@ -288,11 +289,17 @@ impl Args for &Request {
     }
 }
 
-impl Event {
-    pub fn enum_entry_ident(&self) -> Ident {
+impl Message for &Request {
+    fn enum_entry_ident(&self) -> Ident {
         format_ident!("{}", self.name.to_class_case())
     }
 
+    fn message_ident(&self) -> Ident {
+        self.request_ident()
+    }
+}
+
+impl Event {
     pub fn event_ident(&self) -> Ident {
         format_ident!("{}Event", self.name.to_class_case())
     }
@@ -315,6 +322,16 @@ impl Documentation for &Event {
 impl Args for &Event {
     fn args(&self) -> ArgIter {
         ArgIter::new(&self.args)
+    }
+}
+
+impl Message for &Event {
+    fn enum_entry_ident(&self) -> Ident {
+        format_ident!("{}", self.name.to_class_case())
+    }
+
+    fn message_ident(&self) -> Ident {
+        self.event_ident()
     }
 }
 

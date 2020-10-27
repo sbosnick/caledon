@@ -11,17 +11,17 @@ use std::{convert::TryInto, fmt::Write as _, io::Write};
 use inflector::Inflector;
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
-use quote::quote;
+use quote::{format_ident, quote};
 
 use crate::{
-    model::{Arg, Args, Documentation, Event, Interface, Protocol, Request},
+    model::{Arg, Args, Documentation, Event, Interface, Message, Protocol, Request},
     Error, Result,
 };
 
 pub fn generate_code<'a, W, I>(mut file: W, protocols: I) -> Result<()>
 where
     W: Write,
-    I: Iterator<Item = &'a Protocol> + Clone,
+    I: Iterator<Item = &'a Protocol> + Clone + 'a,
 {
     writeln!(
         file,
@@ -35,10 +35,14 @@ where
     let entries = protocols.clone().map(generate_protocol_list_entry);
     let request_entries = protocols.clone().map(generate_family_request_entry);
     let event_entries = protocols.clone().map(generate_family_event_entry);
+    let requests_ident = format_ident!("Requests");
+    let events_ident = format_ident!("Events");
+    let handle_request_entries = generate_handler_entries(protocols.clone(), requests_ident.clone(), |i| i.requests(), |p| p.protocol_requests_ident());
+    let handle_event_entries = generate_handler_entries(protocols.clone(), events_ident.clone(), |i| i.events(), |p| p.protocol_events_ident());
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
-        use crate::core::{ProtocolFamily, ProtocolFamilyMessageList};
+        use crate::core::{MessageHandler, ProtocolFamily, ProtocolFamilyMessageList};
 
         #[doc = "The list of protocols implemented by caledon."]
         pub enum Protocols {
@@ -46,12 +50,12 @@ where
         }
 
         #[doc = "The list of the requests associate with the protocols implemented by caledon."]
-        pub enum Requests {
+        pub enum #requests_ident {
             #(#request_entries,)*
         }
 
         #[doc = "The list of the events associate with the protocols implemented by caledon."]
-        pub enum Events {
+        pub enum #events_ident {
             #(#event_entries,)*
         }
 
@@ -61,13 +65,27 @@ where
             type Events = Events;
         }
 
-        impl ProtocolFamilyMessageList for Requests {
+        impl ProtocolFamilyMessageList for #requests_ident {
             type ProtocolFamily = Protocols;
+
+            fn handle_message<MH: MessageHandler>(&self, handler: MH) -> Result<(), MH::Error> {
+                match self {
+                    #(#handle_request_entries,)*
+                    _ => panic!("Unrecognized message dispatched to handle message!"),
+                }
+            }
         }
 
-        impl ProtocolFamilyMessageList for Events {
+        impl ProtocolFamilyMessageList for #events_ident {
             type  ProtocolFamily = Protocols;
-        }
+
+            fn handle_message<MH: MessageHandler>(&self, handler: MH) -> Result<(), MH::Error> {
+                match self {
+                    #(#handle_event_entries,)*
+                    _ => panic!("Unrecognized message dispatched to handle message!"),
+                }
+            }
+         }
 
         #(#modules)*
     };
@@ -556,6 +574,32 @@ fn generate_event_from_op_entry((opcode, event): (usize, &Event)) -> TokenStream
     quote! {
         #opcode => maker.make::<#event_ident>().map(|m| m.into())?,
     }
+}
+
+fn generate_handler_entries<'a, I, F, G, M, MI>(iter: I, ident: Ident, f: F, g: G) -> impl Iterator<Item = TokenStream> + 'a
+where
+    I: Iterator<Item = &'a Protocol> + 'a,
+    F: Fn(&'a Interface) -> MI + 'a,
+    G: Fn(&'a Protocol) -> Ident + 'a,
+    M: Message,
+    MI: Iterator<Item = M> + 'a
+{
+    iter.flat_map(move |p| {
+        let penum_entry = p.enum_entry_ident();
+        let pmod = p.mod_ident();
+        let pmlist_entry = g(p);
+        p.interfaces().map(move |i| (penum_entry.clone(), pmod.clone(), pmlist_entry.clone(), i))
+    })
+    .flat_map(move |(penum_entry, pmod, pmlist_entry, i)| {
+        let imod = i.mod_ident();
+        let ienum_entry = i.enum_entry_ident();
+        f(i).map(move |m| (penum_entry.clone(), pmod.clone(), pmlist_entry.clone(), imod.clone(), ienum_entry.clone(), m))
+    }).map(move |(penum_entry, pmod, pmlist_entry, imod, ienum_entry, m)| {
+        let menum_entry = m.enum_entry_ident();
+        quote! {
+            #ident::#penum_entry(self::#pmod::#pmlist_entry::#ienum_entry(self::#pmod::#imod::#ident::#menum_entry(msg))) => handler.handle(msg)
+        }
+    })
 }
 
 fn generate_new_impl(message_ident: &Ident, args: impl Args) -> TokenStream {

@@ -282,7 +282,29 @@ impl TryFrom<Protocols> for BuildTimeWaylandTests {
 }
 impl ProtocolFamilyMessageList for FamilyRequests {
     type ProtocolFamily = Protocols;
+
+    fn handle_message<MH: super::MessageHandler>(&self, handler: MH) -> Result<(), MH::Error> {
+        use FamilyRequests::BuildTimeWaylandTests;
+        use BuildTimeWaylandTestsRequest::FdPasser;
+        use Requests::{Destroy, Conjoin};
+
+        match self {
+            BuildTimeWaylandTests(FdPasser(Destroy(msg))) => handler.handle(msg),
+            BuildTimeWaylandTests(FdPasser(Conjoin(msg))) => handler.handle(msg),
+        }
+    }
 }
 impl ProtocolFamilyMessageList for FamilyEvents {
     type ProtocolFamily = Protocols;
+
+    fn handle_message<MH: super::MessageHandler>(&self, handler: MH) -> Result<(), MH::Error> {
+        use FamilyEvents::BuildTimeWaylandTests;
+        use BuildTimeWaylandTestsEvents::FdPasser;
+        use Events::{Fd, PreFd};
+
+        match self {
+            BuildTimeWaylandTests(FdPasser(PreFd(msg))) => handler.handle(msg),
+            BuildTimeWaylandTests(FdPasser(Fd(msg))) => handler.handle(msg),
+        }
+    }
 }

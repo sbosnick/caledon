@@ -160,6 +160,15 @@ pub trait MessageMaker {
     fn make<M: Message>(self) -> Result<M, Self::Error>;
 }
 
+/// The interface for a type that is able to process a `Message`.
+pub trait MessageHandler {
+    /// The error type when attempting to process a `Message`.
+    type Error: std::error::Error;
+
+    /// Process one message of the provided type.
+    fn handle<M: Message>(&self, message: &M) -> Result<(), Self::Error>;
+}
+
 /// The [Wayland] wire protocol representation of a [Wayland] interface.
 ///
 /// At the wire protocol level an interface is just a list of request messages and a
@@ -227,6 +236,9 @@ pub trait Protocol: Sized {
 pub trait ProtocolFamilyMessageList {
     /// The protocol family to which this message list belongs.
     type ProtocolFamily: ProtocolFamily;
+
+    /// Handle the current message using the supplied `MessageHandler`.
+    fn handle_message<MH: MessageHandler>(&self, handler: MH) -> Result<(), MH::Error>;
 }
 
 /// A family of [Wayland] protocols.
