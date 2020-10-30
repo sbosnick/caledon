@@ -23,8 +23,9 @@ use tokio_util::codec::{Decoder, Framed};
 
 use super::{
     codec::{self, CodecError as CodecErr, WaylandCodec},
-    ClientRole, Fd, Message, MessageMaker, ObjectId, ProtocolFamily, ServerRole, Signature,
-MessageHandler, ProtocolFamilyMessageList};
+    ClientRole, Fd, Message, MessageHandler, MessageMaker, ObjectId, ProtocolFamily,
+    ProtocolFamilyMessageList, ServerRole, Signature,
+};
 
 // === WaylandTransport ===
 
@@ -138,7 +139,9 @@ where
         let mut inner = self.project().inner;
         let framed: &mut Framed<_, _> = &mut inner;
 
-        msg.handle_message(TransportHandler { transport: framed.get_mut() })?;
+        msg.handle_message(TransportHandler {
+            transport: framed.get_mut(),
+        })?;
         Sink::<P::Events>::start_send(inner, msg).map_err(|e| e.into())
     }
 
@@ -166,7 +169,9 @@ where
         let mut inner = self.project().inner;
         let framed: &mut Framed<_, _> = &mut inner;
 
-        msg.handle_message(TransportHandler { transport: framed.get_mut() })?;
+        msg.handle_message(TransportHandler {
+            transport: framed.get_mut(),
+        })?;
         Sink::<P::Requests>::start_send(inner, msg).map_err(|e| e.into())
     }
 
@@ -235,7 +240,7 @@ pub trait MessageFdMap {
 
 // === TransportHandler ===
 struct TransportHandler<'a, T> {
-    transport: &'a mut T
+    transport: &'a mut T,
 }
 
 impl<'a, T> MessageHandler for TransportHandler<'a, T>
@@ -468,7 +473,9 @@ mod tests {
     use futures_ringbuf::RingBuffer as AsyncRingBuffer;
     use ringbuf::{Consumer, Producer, RingBuffer};
 
-    use crate::core::testutil::{FdEvent, Protocols, FamilyEvents, BuildTimeWaylandTestsEvents, Events};
+    use crate::core::testutil::{
+        BuildTimeWaylandTestsEvents, Events, FamilyEvents, FdEvent, Protocols,
+    };
     use crate::core::{Decimal, Fd, ObjectId};
 
     struct MockQueue(Option<RawFd>);
@@ -668,7 +675,9 @@ mod tests {
     fn transport_passes_fd() {
         let endpoint = FakeEndpoint::default();
         let message = FdEvent::new(ObjectId(2), Fd(4));
-        let item = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(Events::Fd(message)));
+        let item = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(
+            Events::Fd(message),
+        ));
 
         let mut sut = WaylandTransport::<_, ServerRole, Protocols, _>::new(endpoint, ());
         block_on(sut.send(item)).expect("Unable to send message.");
@@ -680,7 +689,9 @@ mod tests {
     fn transport_sends_and_receives_fd() {
         let endpoint = FakeEndpoint::default();
         let message = FdEvent::new(ObjectId(2), Fd(4));
-        let item = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(Events::Fd(message)));
+        let item = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(
+            Events::Fd(message),
+        ));
         let map = FakeMessageFdMap::new(true);
 
         let mut sut = WaylandTransport::<_, ServerRole, Protocols, _>::new(endpoint, map);
@@ -695,7 +706,9 @@ mod tests {
         let expected_fd = 4;
         let endpoint = FakeEndpoint::default();
         let message = FdEvent::new(ObjectId(2), Fd(expected_fd));
-        let item = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(Events::Fd(message)));
+        let item = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(
+            Events::Fd(message),
+        ));
         let map = FakeMessageFdMap::new(true);
 
         let mut sut = WaylandTransport::<_, ServerRole, Protocols, _>::new(endpoint, map);

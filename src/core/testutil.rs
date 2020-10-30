@@ -284,9 +284,9 @@ impl ProtocolFamilyMessageList for FamilyRequests {
     type ProtocolFamily = Protocols;
 
     fn handle_message<MH: super::MessageHandler>(&self, mut handler: MH) -> Result<(), MH::Error> {
-        use FamilyRequests::BuildTimeWaylandTests;
         use BuildTimeWaylandTestsRequest::FdPasser;
-        use Requests::{Destroy, Conjoin};
+        use FamilyRequests::BuildTimeWaylandTests;
+        use Requests::{Conjoin, Destroy};
 
         match self {
             BuildTimeWaylandTests(FdPasser(Destroy(msg))) => handler.handle(msg),
@@ -298,9 +298,9 @@ impl ProtocolFamilyMessageList for FamilyEvents {
     type ProtocolFamily = Protocols;
 
     fn handle_message<MH: super::MessageHandler>(&self, mut handler: MH) -> Result<(), MH::Error> {
-        use FamilyEvents::BuildTimeWaylandTests;
         use BuildTimeWaylandTestsEvents::FdPasser;
         use Events::{Fd, PreFd};
+        use FamilyEvents::BuildTimeWaylandTests;
 
         match self {
             BuildTimeWaylandTests(FdPasser(PreFd(msg))) => handler.handle(msg),

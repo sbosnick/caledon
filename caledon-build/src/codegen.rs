@@ -37,8 +37,18 @@ where
     let event_entries = protocols.clone().map(generate_family_event_entry);
     let requests_ident = format_ident!("Requests");
     let events_ident = format_ident!("Events");
-    let handle_request_entries = generate_handler_entries(protocols.clone(), requests_ident.clone(), |i| i.requests(), |p| p.protocol_requests_ident());
-    let handle_event_entries = generate_handler_entries(protocols.clone(), events_ident.clone(), |i| i.events(), |p| p.protocol_events_ident());
+    let handle_request_entries = generate_handler_entries(
+        protocols.clone(),
+        requests_ident.clone(),
+        |i| i.requests(),
+        |p| p.protocol_requests_ident(),
+    );
+    let handle_event_entries = generate_handler_entries(
+        protocols.clone(),
+        events_ident.clone(),
+        |i| i.events(),
+        |p| p.protocol_events_ident(),
+    );
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
@@ -576,13 +586,18 @@ fn generate_event_from_op_entry((opcode, event): (usize, &Event)) -> TokenStream
     }
 }
 
-fn generate_handler_entries<'a, I, F, G, M, MI>(iter: I, ident: Ident, f: F, g: G) -> impl Iterator<Item = TokenStream> + 'a
+fn generate_handler_entries<'a, I, F, G, M, MI>(
+    iter: I,
+    ident: Ident,
+    f: F,
+    g: G,
+) -> impl Iterator<Item = TokenStream> + 'a
 where
     I: Iterator<Item = &'a Protocol> + 'a,
     F: Fn(&'a Interface) -> MI + 'a,
     G: Fn(&'a Protocol) -> Ident + 'a,
     M: Message,
-    MI: Iterator<Item = M> + 'a
+    MI: Iterator<Item = M> + 'a,
 {
     iter.flat_map(move |p| {
         let penum_entry = p.enum_entry_ident();

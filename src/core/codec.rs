@@ -18,8 +18,9 @@ use snafu::Snafu;
 use tokio_util::codec::{Decoder, Encoder};
 
 use super::{
-    ClientRole, Message, ObjectId, ProtocolFamily, Role, ServerRole, Signature,
-MessageHandler, ProtocolFamilyMessageList};
+    ClientRole, Message, MessageHandler, ObjectId, ProtocolFamily, ProtocolFamilyMessageList, Role,
+    ServerRole, Signature,
+};
 
 // === WaylandCodec ===
 
@@ -83,7 +84,10 @@ where
     type Error = CodecError;
 
     fn encode(&mut self, item: P::Events, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        item.handle_message(CodecHandler { codec: self, buffer: dst })
+        item.handle_message(CodecHandler {
+            codec: self,
+            buffer: dst,
+        })
     }
 }
 
@@ -94,7 +98,10 @@ where
     type Error = CodecError;
 
     fn encode(&mut self, item: P::Requests, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        item.handle_message(CodecHandler { codec: self, buffer: dst })
+        item.handle_message(CodecHandler {
+            codec: self,
+            buffer: dst,
+        })
     }
 }
 
@@ -568,7 +575,10 @@ mod tests {
 
     use assert_matches::assert_matches;
 
-    use crate::core::testutil::{DestroyRequest, PreFdEvent, Protocols, FamilyRequests, BuildTimeWaylandTestsRequest, Requests, FamilyEvents, BuildTimeWaylandTestsEvents, Events};
+    use crate::core::testutil::{
+        BuildTimeWaylandTestsEvents, BuildTimeWaylandTestsRequest, DestroyRequest, Events,
+        FamilyEvents, FamilyRequests, PreFdEvent, Protocols, Requests,
+    };
     use crate::core::{Decimal, Fd, ObjectId};
 
     #[test]
@@ -576,8 +586,12 @@ mod tests {
         let mut server = WaylandCodec::<ServerRole, Protocols>::default();
         let mut client = WaylandCodec::<ClientRole, Protocols>::default();
         let mut buffer = BytesMut::new();
-        let destroy = FamilyRequests::BuildTimeWaylandTests(BuildTimeWaylandTestsRequest::FdPasser(Requests::Destroy(DestroyRequest{})));
-        let prefd = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(Events::PreFd(PreFdEvent {})));
+        let destroy = FamilyRequests::BuildTimeWaylandTests(
+            BuildTimeWaylandTestsRequest::FdPasser(Requests::Destroy(DestroyRequest {})),
+        );
+        let prefd = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(
+            Events::PreFd(PreFdEvent {}),
+        ));
 
         client.encode(destroy, &mut buffer).unwrap();
         server.encode(prefd, &mut buffer).unwrap();
@@ -597,7 +611,9 @@ mod tests {
             [0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00]
         };
         let mut buffer = BytesMut::new();
-        let destroy = FamilyRequests::BuildTimeWaylandTests(BuildTimeWaylandTestsRequest::FdPasser(Requests::Destroy(DestroyRequest{})));
+        let destroy = FamilyRequests::BuildTimeWaylandTests(
+            BuildTimeWaylandTestsRequest::FdPasser(Requests::Destroy(DestroyRequest {})),
+        );
 
         let mut sut = WaylandCodec::<ClientRole, Protocols>::default();
         sut.encode(destroy, &mut buffer).unwrap();
