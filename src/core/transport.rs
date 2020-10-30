@@ -233,7 +233,7 @@ impl MessageMaker for DispatchMessage {
 /// An interface to a map that identifies if a `Message` passes a file descriptor.
 ///
 /// This uses an `opcode` on a given object (identified by its `ObjectId`) to
-/// indeirectly identify an incoming `Message`.
+/// indirectly identify an incoming `Message`.
 pub trait MessageFdMap {
     fn message_has_fd(&self, object: ObjectId, opcode: u16) -> bool;
 }
