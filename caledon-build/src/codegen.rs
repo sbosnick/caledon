@@ -68,7 +68,7 @@ where
         impl ProtocolFamilyMessageList for #requests_ident {
             type ProtocolFamily = Protocols;
 
-            fn handle_message<MH: MessageHandler>(&self, handler: MH) -> Result<(), MH::Error> {
+            fn handle_message<MH: MessageHandler>(&self, mut handler: MH) -> Result<(), MH::Error> {
                 match self {
                     #(#handle_request_entries,)*
                     _ => panic!("Unrecognized message dispatched to handle message!"),
@@ -79,7 +79,7 @@ where
         impl ProtocolFamilyMessageList for #events_ident {
             type  ProtocolFamily = Protocols;
 
-            fn handle_message<MH: MessageHandler>(&self, handler: MH) -> Result<(), MH::Error> {
+            fn handle_message<MH: MessageHandler>(&self, mut handler: MH) -> Result<(), MH::Error> {
                 match self {
                     #(#handle_event_entries,)*
                     _ => panic!("Unrecognized message dispatched to handle message!"),

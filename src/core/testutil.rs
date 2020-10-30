@@ -264,7 +264,7 @@ pub enum FamilyEvents {
 impl ProtocolFamily for Protocols {
     type Requests = FamilyRequests;
 
-    type Events = FamilyRequests;
+    type Events = FamilyEvents;
 }
 impl From<BuildTimeWaylandTests> for Protocols {
     fn from(b: BuildTimeWaylandTests) -> Self {
@@ -283,7 +283,7 @@ impl TryFrom<Protocols> for BuildTimeWaylandTests {
 impl ProtocolFamilyMessageList for FamilyRequests {
     type ProtocolFamily = Protocols;
 
-    fn handle_message<MH: super::MessageHandler>(&self, handler: MH) -> Result<(), MH::Error> {
+    fn handle_message<MH: super::MessageHandler>(&self, mut handler: MH) -> Result<(), MH::Error> {
         use FamilyRequests::BuildTimeWaylandTests;
         use BuildTimeWaylandTestsRequest::FdPasser;
         use Requests::{Destroy, Conjoin};
@@ -297,7 +297,7 @@ impl ProtocolFamilyMessageList for FamilyRequests {
 impl ProtocolFamilyMessageList for FamilyEvents {
     type ProtocolFamily = Protocols;
 
-    fn handle_message<MH: super::MessageHandler>(&self, handler: MH) -> Result<(), MH::Error> {
+    fn handle_message<MH: super::MessageHandler>(&self, mut handler: MH) -> Result<(), MH::Error> {
         use FamilyEvents::BuildTimeWaylandTests;
         use BuildTimeWaylandTestsEvents::FdPasser;
         use Events::{Fd, PreFd};

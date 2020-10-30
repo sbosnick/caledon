@@ -166,7 +166,7 @@ pub trait MessageHandler {
     type Error: std::error::Error;
 
     /// Process one message of the provided type.
-    fn handle<M: Message>(&self, message: &M) -> Result<(), Self::Error>;
+    fn handle<M: Message>(&mut self, message: &M) -> Result<(), Self::Error>;
 }
 
 /// The [Wayland] wire protocol representation of a [Wayland] interface.

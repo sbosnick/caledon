@@ -23,9 +23,8 @@ use tokio_util::codec::{Decoder, Framed};
 
 use super::{
     codec::{self, CodecError as CodecErr, WaylandCodec},
-    ClientRole, EventMessage, Fd, Message, MessageMaker, ObjectId, ProtocolFamily,
-    ProtocolFamilyMessage, RequestMessage, ServerRole, Signature,
-};
+    ClientRole, Fd, Message, MessageMaker, ObjectId, ProtocolFamily, ServerRole, Signature,
+MessageHandler, ProtocolFamilyMessageList};
 
 // === WaylandTransport ===
 
@@ -124,61 +123,59 @@ where
     }
 }
 
-impl<T, P, M, Item> Sink<Item> for WaylandTransport<T, ServerRole, P, M>
+impl<T, P, M> Sink<P::Events> for WaylandTransport<T, ServerRole, P, M>
 where
-    Item: Message + EventMessage + ProtocolFamilyMessage<P>,
     P: ProtocolFamily,
     T: AsyncWrite + Unpin + EnqueueFd,
 {
     type Error = TransportError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<Item>::poll_ready(self.project().inner, cx).map_err(|e| e.into())
+        Sink::<P::Events>::poll_ready(self.project().inner, cx).map_err(|e| e.into())
     }
 
-    fn start_send(self: Pin<&mut Self>, msg: Item) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, msg: P::Events) -> Result<(), Self::Error> {
         let mut inner = self.project().inner;
         let framed: &mut Framed<_, _> = &mut inner;
 
-        msg.args().enqueue(framed.get_mut())?;
-        Sink::<Item>::start_send(inner, msg).map_err(|e| e.into())
+        msg.handle_message(TransportHandler { transport: framed.get_mut() })?;
+        Sink::<P::Events>::start_send(inner, msg).map_err(|e| e.into())
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<Item>::poll_flush(self.project().inner, cx).map_err(|e| e.into())
+        Sink::<P::Events>::poll_flush(self.project().inner, cx).map_err(|e| e.into())
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<Item>::poll_close(self.project().inner, cx).map_err(|e| e.into())
+        Sink::<P::Events>::poll_close(self.project().inner, cx).map_err(|e| e.into())
     }
 }
 
-impl<T, P, M, Item> Sink<Item> for WaylandTransport<T, ClientRole, P, M>
+impl<T, P, M> Sink<P::Requests> for WaylandTransport<T, ClientRole, P, M>
 where
-    Item: Message + RequestMessage + ProtocolFamilyMessage<P>,
     P: ProtocolFamily,
     T: AsyncWrite + Unpin + EnqueueFd,
 {
     type Error = TransportError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<Item>::poll_ready(self.project().inner, cx).map_err(|e| e.into())
+        Sink::<P::Requests>::poll_ready(self.project().inner, cx).map_err(|e| e.into())
     }
 
-    fn start_send(self: Pin<&mut Self>, msg: Item) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, msg: P::Requests) -> Result<(), Self::Error> {
         let mut inner = self.project().inner;
         let framed: &mut Framed<_, _> = &mut inner;
 
-        msg.args().enqueue(framed.get_mut())?;
-        Sink::<Item>::start_send(inner, msg).map_err(|e| e.into())
+        msg.handle_message(TransportHandler { transport: framed.get_mut() })?;
+        Sink::<P::Requests>::start_send(inner, msg).map_err(|e| e.into())
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<Item>::poll_flush(self.project().inner, cx).map_err(|e| e.into())
+        Sink::<P::Requests>::poll_flush(self.project().inner, cx).map_err(|e| e.into())
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<Item>::poll_close(self.project().inner, cx).map_err(|e| e.into())
+        Sink::<P::Requests>::poll_close(self.project().inner, cx).map_err(|e| e.into())
     }
 }
 
@@ -234,6 +231,22 @@ impl MessageMaker for DispatchMessage {
 /// indeirectly identify an incoming `Message`.
 pub trait MessageFdMap {
     fn message_has_fd(&self, object: ObjectId, opcode: u16) -> bool;
+}
+
+// === TransportHandler ===
+struct TransportHandler<'a, T> {
+    transport: &'a mut T
+}
+
+impl<'a, T> MessageHandler for TransportHandler<'a, T>
+where
+    T: EnqueueFd,
+{
+    type Error = TransportError;
+
+    fn handle<ME: Message>(&mut self, message: &ME) -> Result<(), Self::Error> {
+        message.args().enqueue(self.transport)
+    }
 }
 
 // === TransportError ===
@@ -455,7 +468,7 @@ mod tests {
     use futures_ringbuf::RingBuffer as AsyncRingBuffer;
     use ringbuf::{Consumer, Producer, RingBuffer};
 
-    use crate::core::testutil::{FdEvent, Protocols};
+    use crate::core::testutil::{FdEvent, Protocols, FamilyEvents, BuildTimeWaylandTestsEvents, Events};
     use crate::core::{Decimal, Fd, ObjectId};
 
     struct MockQueue(Option<RawFd>);
@@ -655,9 +668,10 @@ mod tests {
     fn transport_passes_fd() {
         let endpoint = FakeEndpoint::default();
         let message = FdEvent::new(ObjectId(2), Fd(4));
+        let item = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(Events::Fd(message)));
 
         let mut sut = WaylandTransport::<_, ServerRole, Protocols, _>::new(endpoint, ());
-        block_on(sut.send(message)).expect("Unable to send message.");
+        block_on(sut.send(item)).expect("Unable to send message.");
 
         assert!(!sut.inner.get_ref().consumer.is_empty());
     }
@@ -666,10 +680,11 @@ mod tests {
     fn transport_sends_and_receives_fd() {
         let endpoint = FakeEndpoint::default();
         let message = FdEvent::new(ObjectId(2), Fd(4));
+        let item = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(Events::Fd(message)));
         let map = FakeMessageFdMap::new(true);
 
         let mut sut = WaylandTransport::<_, ServerRole, Protocols, _>::new(endpoint, map);
-        block_on(sut.send(message)).expect("Unable to send message.");
+        block_on(sut.send(item)).expect("Unable to send message.");
         let result = block_on(sut.next());
 
         assert_matches!(result, Some(Ok(DispatchMessage{ inner: _, fd: Some(_) })));
@@ -680,10 +695,11 @@ mod tests {
         let expected_fd = 4;
         let endpoint = FakeEndpoint::default();
         let message = FdEvent::new(ObjectId(2), Fd(expected_fd));
+        let item = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(Events::Fd(message)));
         let map = FakeMessageFdMap::new(true);
 
         let mut sut = WaylandTransport::<_, ServerRole, Protocols, _>::new(endpoint, map);
-        block_on(sut.send(message)).expect("Unable to send message.");
+        block_on(sut.send(item)).expect("Unable to send message.");
         let mut msg = block_on(sut.next()).unwrap().unwrap();
         let args = msg.extract_args::<<FdEvent as Message>::Signature>();
 

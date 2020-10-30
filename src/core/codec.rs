@@ -18,9 +18,8 @@ use snafu::Snafu;
 use tokio_util::codec::{Decoder, Encoder};
 
 use super::{
-    ClientRole, EventMessage, Message, ObjectId, ProtocolFamily, ProtocolFamilyMessage,
-    RequestMessage, Role, ServerRole, Signature,
-};
+    ClientRole, Message, ObjectId, ProtocolFamily, Role, ServerRole, Signature,
+MessageHandler, ProtocolFamilyMessageList};
 
 // === WaylandCodec ===
 
@@ -57,7 +56,7 @@ where
     R: Role,
     P: ProtocolFamily,
 {
-    fn encode_message<T>(&mut self, item: T, dst: &mut BytesMut) -> Result<(), CodecError>
+    fn encode_message<T>(&mut self, item: &T, dst: &mut BytesMut) -> Result<(), CodecError>
     where
         T: Message,
     {
@@ -77,27 +76,25 @@ where
     }
 }
 
-impl<T, P> Encoder<T> for WaylandCodec<ServerRole, P>
+impl<P> Encoder<P::Events> for WaylandCodec<ServerRole, P>
 where
-    T: Message + EventMessage + ProtocolFamilyMessage<P>,
     P: ProtocolFamily,
 {
     type Error = CodecError;
 
-    fn encode(&mut self, item: T, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.encode_message(item, dst)
+    fn encode(&mut self, item: P::Events, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        item.handle_message(CodecHandler { codec: self, buffer: dst })
     }
 }
 
-impl<T, P> Encoder<T> for WaylandCodec<ClientRole, P>
+impl<P> Encoder<P::Requests> for WaylandCodec<ClientRole, P>
 where
-    T: Message + RequestMessage + ProtocolFamilyMessage<P>,
     P: ProtocolFamily,
 {
     type Error = CodecError;
 
-    fn encode(&mut self, item: T, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.encode_message(item, dst)
+    fn encode(&mut self, item: P::Requests, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        item.handle_message(CodecHandler { codec: self, buffer: dst })
     }
 }
 
@@ -199,6 +196,24 @@ impl WaylandHeader {
                 len_opcode: decode_u32(src),
             })
         }
+    }
+}
+
+// === CodecHandler ===
+struct CodecHandler<'a, R, P> {
+    codec: &'a mut WaylandCodec<R, P>,
+    buffer: &'a mut BytesMut,
+}
+
+impl<'a, R, P> MessageHandler for CodecHandler<'a, R, P>
+where
+    R: Role,
+    P: ProtocolFamily,
+{
+    type Error = CodecError;
+
+    fn handle<M: Message>(&mut self, message: &M) -> Result<(), Self::Error> {
+        self.codec.encode_message(message, self.buffer)
     }
 }
 
@@ -553,7 +568,7 @@ mod tests {
 
     use assert_matches::assert_matches;
 
-    use crate::core::testutil::{DestroyRequest, PreFdEvent, Protocols};
+    use crate::core::testutil::{DestroyRequest, PreFdEvent, Protocols, FamilyRequests, BuildTimeWaylandTestsRequest, Requests, FamilyEvents, BuildTimeWaylandTestsEvents, Events};
     use crate::core::{Decimal, Fd, ObjectId};
 
     #[test]
@@ -561,15 +576,17 @@ mod tests {
         let mut server = WaylandCodec::<ServerRole, Protocols>::default();
         let mut client = WaylandCodec::<ClientRole, Protocols>::default();
         let mut buffer = BytesMut::new();
+        let destroy = FamilyRequests::BuildTimeWaylandTests(BuildTimeWaylandTestsRequest::FdPasser(Requests::Destroy(DestroyRequest{})));
+        let prefd = FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(Events::PreFd(PreFdEvent {})));
 
-        client.encode(DestroyRequest {}, &mut buffer).unwrap();
-        server.encode(PreFdEvent {}, &mut buffer).unwrap();
+        client.encode(destroy, &mut buffer).unwrap();
+        server.encode(prefd, &mut buffer).unwrap();
 
         // The next 2 lines are compiler errors because of a mismatch between
         // Client/Server and Event/Requests.
 
-        // server.encode(DestroyRequest{}, &mut buffer).unwrap();
-        // client.encode(PreFdEvent{}, &mut buffer).unwrap();
+        // server.encode(destroy, &mut buffer).unwrap();
+        // client.encode(prefd, &mut buffer).unwrap();
     }
 
     #[test]
@@ -580,9 +597,10 @@ mod tests {
             [0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00]
         };
         let mut buffer = BytesMut::new();
+        let destroy = FamilyRequests::BuildTimeWaylandTests(BuildTimeWaylandTestsRequest::FdPasser(Requests::Destroy(DestroyRequest{})));
 
         let mut sut = WaylandCodec::<ClientRole, Protocols>::default();
-        sut.encode(DestroyRequest {}, &mut buffer).unwrap();
+        sut.encode(destroy, &mut buffer).unwrap();
 
         assert_eq!(buffer, &expected.as_ref());
     }
