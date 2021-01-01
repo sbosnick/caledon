@@ -685,6 +685,16 @@ where
     )
 }
 
+// Note: The call to ".intersperse" below is from Itertools but
+// there is a an unstable feature to add the same method Iterator.
+// Once the Iterator::intersperse method stabalizes this would be
+// a name collision, expect that Itertools will likely remove the
+// Itertools::intersperse method when this happend. "unstable_name_collisions"
+// is a future compatibility lint but in this case the future
+// collision is unlikely to occur in practice. This "allow" can
+// most likely be removed once Iterator::intersperse has stabalized and
+// our MSRV has advanced enough to no longer need the Itertools version.
+#[allow(unstable_name_collisions)]
 fn format_long_doc<D, F>(doc: D, f: F) -> String
 where
     D: Documentation,
