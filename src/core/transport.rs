@@ -469,10 +469,11 @@ mod tests {
 
     use assert_matches::assert_matches;
     use futures::executor::block_on;
-    use futures::prelude::*;
+    use futures::{sink::SinkExt, stream::StreamExt};
     use futures_ringbuf::RingBuffer as AsyncRingBuffer;
     use ringbuf::{Consumer, Producer, RingBuffer};
-
+    use tokio::io::ReadBuf;
+    use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
     use crate::core::testutil::{
         BuildTimeWaylandTestsEvents, Events, FamilyEvents, FdEvent, Protocols,
     };
@@ -596,7 +597,7 @@ mod tests {
         producer: Producer<RawFd>,
         consumer: Consumer<RawFd>,
         #[pin]
-        io: AsyncRingBuffer<u8>,
+        io: Compat<AsyncRingBuffer<u8>>,
     }
 
     impl Default for FakeEndpoint {
@@ -605,17 +606,17 @@ mod tests {
             FakeEndpoint {
                 producer,
                 consumer,
-                io: AsyncRingBuffer::new(1024),
+                io: AsyncRingBuffer::new(1024).compat(),
             }
         }
     }
 
-    impl super::AsyncRead for FakeEndpoint {
+    impl AsyncRead for FakeEndpoint {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            buf: &mut [u8],
-        ) -> Poll<io::Result<usize>> {
+            buf: &mut ReadBuf,
+        ) -> Poll<io::Result<()>> {
             self.project().io.poll_read(cx, buf)
         }
     }
