@@ -80,7 +80,6 @@ pub trait TargetInfo<T> {
     fn remove(&mut self, tag: Tag);
 }
 
-
 mod store {
     use std::sync::{Arc, Mutex};
 
@@ -207,9 +206,9 @@ mod tests {
     struct StubInfo {}
 
     impl TargetInfo<FakeTarget> for StubInfo {
-        fn add(&mut self, _: Tag, _: &FakeTarget) { }
+        fn add(&mut self, _: Tag, _: &FakeTarget) {}
 
-        fn remove(&mut self, _: Tag) { }
+        fn remove(&mut self, _: Tag) {}
     }
 
     impl Target<u8, Ready<DispatchResult<Self>>> for FakeTarget {
@@ -229,7 +228,7 @@ mod tests {
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
 
-        let _ = dispatcher(stream, |_| tag, tag, target, StubInfo{}).await;
+        let _ = dispatcher(stream, |_| tag, tag, target, StubInfo {}).await;
 
         let outcome = inner.lock().expect("Can't lock mutex");
         assert_eq!(*outcome, Some(item));
@@ -245,7 +244,7 @@ mod tests {
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
 
-        let _ = dispatcher(stream, |_| tag0, tag1, target, StubInfo{}).await;
+        let _ = dispatcher(stream, |_| tag0, tag1, target, StubInfo {}).await;
 
         let outcome = inner.lock().expect("Can't lock mutex");
         assert_eq!(*outcome, Some(item));
@@ -261,7 +260,7 @@ mod tests {
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
 
-        let _ = dispatcher(stream, |_| tag1, tag0, target, StubInfo{}).await;
+        let _ = dispatcher(stream, |_| tag1, tag0, target, StubInfo {}).await;
 
         let outcome = inner.lock().expect("Can't lock mutex");
         assert_eq!(*outcome, Some(item));
@@ -273,7 +272,7 @@ mod tests {
         let stream = stream::empty::<Result<u8, ()>>();
         let target = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Continue);
 
-        let _ = dispatcher(stream, |_| tag, tag, target, StubInfo{}).await;
+        let _ = dispatcher(stream, |_| tag, tag, target, StubInfo {}).await;
     }
 
     #[tokio::test]
@@ -290,7 +289,14 @@ mod tests {
             DispatchResult::Add(tag1, target1),
         );
 
-        let _ = dispatcher(stream, |tag| Tag::new(*tag as usize), tag0, target0, StubInfo{}).await;
+        let _ = dispatcher(
+            stream,
+            |tag| Tag::new(*tag as usize),
+            tag0,
+            target0,
+            StubInfo {},
+        )
+        .await;
 
         let outcome = inner.lock().expect("Can't lock mutex");
         assert_eq!(*outcome, Some(item));
@@ -307,7 +313,14 @@ mod tests {
         let target1 = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Remove(tag1));
         let target0 = FakeTarget::new(inner.clone(), DispatchResult::Add(tag1, target1));
 
-        let _ = dispatcher(stream, |tag| Tag::new(*tag as usize), tag0, target0, StubInfo{}).await;
+        let _ = dispatcher(
+            stream,
+            |tag| Tag::new(*tag as usize),
+            tag0,
+            target0,
+            StubInfo {},
+        )
+        .await;
 
         let outcome = inner.lock().expect("Can't lock mutex");
         assert_eq!(*outcome, Some(item));
