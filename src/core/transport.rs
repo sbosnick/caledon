@@ -467,6 +467,10 @@ mod tests {
     use std::io;
     use std::os::unix::io::{AsRawFd, RawFd};
 
+    use crate::core::testutil::{
+        BuildTimeWaylandTestsEvents, Events, FamilyEvents, FdEvent, Protocols,
+    };
+    use crate::core::{Decimal, Fd, ObjectId};
     use assert_matches::assert_matches;
     use futures::executor::block_on;
     use futures::{sink::SinkExt, stream::StreamExt};
@@ -474,10 +478,6 @@ mod tests {
     use ringbuf::{Consumer, Producer, RingBuffer};
     use tokio::io::ReadBuf;
     use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
-    use crate::core::testutil::{
-        BuildTimeWaylandTestsEvents, Events, FamilyEvents, FdEvent, Protocols,
-    };
-    use crate::core::{Decimal, Fd, ObjectId};
 
     struct MockQueue(Option<RawFd>);
 
