@@ -54,6 +54,8 @@ pub trait Argument: private::ArgumentBase {}
 pub struct ObjectId(u32);
 
 /// A fixed decimal `Argument` for the [Wayland] wire protocol.
+///
+/// [Wayland]: https://wayland.freedesktop.org/
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Decimal(u32);
 
@@ -61,6 +63,8 @@ pub struct Decimal(u32);
 ///
 /// This is a new-type warpper around a `RawFd`. We can't use `RawFd` directly
 /// because that is a type alais for `i32` which is already the int `Argument` type.
+///
+/// [Wayland]: https://wayland.freedesktop.org/
 #[derive(Debug, Clone)]
 pub struct Fd(RawFd);
 
@@ -115,7 +119,7 @@ pub trait Message: Sized {
 ///
 /// A `MessageList` will typically be an `enum` with each message type associated
 /// with one variant of the `enum` and will typically be generated from one of the
-/// [Waland] protocol XML files.
+/// [Wayland] protocol XML files.
 ///
 /// Each `MessageList` will be either the requests or the events for a particular
 /// interface.
