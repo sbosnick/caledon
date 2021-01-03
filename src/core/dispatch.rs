@@ -11,8 +11,6 @@ use std::{future::Future, sync::Arc};
 use futures_core::TryStream;
 use futures_util::TryStreamExt as _;
 
-pub use crate::core::store::Tag;
-
 // TODO: remove this when it is no longer needed
 #[allow(dead_code)]
 pub async fn dispatcher<ST, SI, F, G, T, TS>(stream: ST, f: F, targets: TS) -> Result<(), ST::Error>
@@ -77,7 +75,7 @@ pub trait TargetStore<SI> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::store::TargetStoreImpl;
+    use crate::core::{store::ObjectMap, ObjectId};
 
     use std::{
         iter,
@@ -89,11 +87,11 @@ mod tests {
     #[derive(Debug, Clone)]
     struct FakeTarget {
         item: Arc<Mutex<Option<u8>>>,
-        result: Box<DispatchResult<Tag, FakeTarget>>,
+        result: Box<DispatchResult<ObjectId, FakeTarget>>,
     }
 
     impl FakeTarget {
-        fn new(item: Arc<Mutex<Option<u8>>>, result: DispatchResult<Tag, Self>) -> Self {
+        fn new(item: Arc<Mutex<Option<u8>>>, result: DispatchResult<ObjectId, Self>) -> Self {
             Self {
                 item,
                 result: Box::new(result),
@@ -101,10 +99,10 @@ mod tests {
         }
     }
 
-    impl Target<u8, Ready<DispatchResult<Tag, Self>>> for FakeTarget {
-        type Tag = Tag;
+    impl Target<u8, Ready<DispatchResult<ObjectId, Self>>> for FakeTarget {
+        type Tag = ObjectId;
 
-        fn dispatch(&self, item: u8) -> Ready<DispatchResult<Tag, Self>> {
+        fn dispatch(&self, item: u8) -> Ready<DispatchResult<Self::Tag, Self>> {
             let mut guard = self.item.lock().expect("Can't lock mutex");
             *guard = Some(item);
             ready(*self.result.clone())
@@ -113,13 +111,13 @@ mod tests {
 
     #[tokio::test]
     async fn dispatcher_dispatches_default_tag_to_default_target() {
-        let tag = Tag::new(0);
+        let tag = ObjectId(0);
         let item = 1;
         let result: Result<_, ()> = Ok(item);
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let targets = TargetStoreImpl::new(tag, target);
+        let targets = ObjectMap::new(tag, target);
 
         let _ = dispatcher(stream, |_| tag, targets).await;
 
@@ -129,14 +127,14 @@ mod tests {
 
     #[tokio::test]
     async fn dispatcher_dispatches_unknown_tag_to_default_target() {
-        let tag1 = Tag::new(1);
-        let tag0 = Tag::new(0);
+        let tag1 = ObjectId(1);
+        let tag0 = ObjectId(0);
         let item = 1;
         let result: Result<_, ()> = Ok(item);
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let targets = TargetStoreImpl::new(tag1, target);
+        let targets = ObjectMap::new(tag1, target);
 
         let _ = dispatcher(stream, |_| tag0, targets).await;
 
@@ -146,14 +144,14 @@ mod tests {
 
     #[tokio::test]
     async fn dispatcher_dispatches_too_big_tag_to_default_target() {
-        let tag0 = Tag::new(0);
-        let tag1 = Tag::new(1);
+        let tag0 = ObjectId(0);
+        let tag1 = ObjectId(1);
         let item = 1;
         let result: Result<_, ()> = Ok(item);
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let targets = TargetStoreImpl::new(tag0, target);
+        let targets = ObjectMap::new(tag0, target);
 
         let _ = dispatcher(stream, |_| tag1, targets).await;
 
@@ -163,18 +161,18 @@ mod tests {
 
     #[tokio::test]
     async fn dispatcher_dispatches_empty_stream() {
-        let tag = Tag::new(0);
+        let tag = ObjectId(0);
         let stream = stream::empty::<Result<u8, ()>>();
         let target = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Continue);
-        let targets = TargetStoreImpl::new(tag, target);
+        let targets = ObjectMap::new(tag, target);
 
         let _ = dispatcher(stream, |_| tag, targets).await;
     }
 
     #[tokio::test]
     async fn dispatcher_dispatches_to_added_target() {
-        let tag0 = Tag::new(0);
-        let tag1 = Tag::new(1);
+        let tag0 = ObjectId(0);
+        let tag1 = ObjectId(1);
         let item = 1;
         let result: Result<u8, ()> = Ok(item);
         let stream = stream::iter(vec![Ok(0), result]);
@@ -184,9 +182,9 @@ mod tests {
             Arc::new(Mutex::new(None)),
             DispatchResult::Add(tag1, target1),
         );
-        let targets = TargetStoreImpl::new(tag0, target0);
+        let targets = ObjectMap::new(tag0, target0);
 
-        let _ = dispatcher(stream, |tag| Tag::new(*tag as usize), targets).await;
+        let _ = dispatcher(stream, |tag| ObjectId(*tag as u32), targets).await;
 
         let outcome = inner.lock().expect("Can't lock mutex");
         assert_eq!(*outcome, Some(item));
@@ -194,17 +192,17 @@ mod tests {
 
     #[tokio::test]
     async fn dispatcher_dispatches_removed_target_to_default_target() {
-        let tag0 = Tag::new(0);
-        let tag1 = Tag::new(1);
+        let tag0 = ObjectId(0);
+        let tag1 = ObjectId(1);
         let item = 1;
         let result: Result<u8, ()> = Ok(item);
         let stream = stream::iter(vec![Ok(0), Ok(1), result]);
         let inner = Arc::new(Mutex::new(None));
         let target1 = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Remove(tag1));
         let target0 = FakeTarget::new(inner.clone(), DispatchResult::Add(tag1, target1));
-        let targets = TargetStoreImpl::new(tag0, target0);
+        let targets = ObjectMap::new(tag0, target0);
 
-        let _ = dispatcher(stream, |tag| Tag::new(*tag as usize), targets).await;
+        let _ = dispatcher(stream, |tag| ObjectId(*tag as u32), targets).await;
         let outcome = inner.lock().expect("Can't lock mutex");
         assert_eq!(*outcome, Some(item));
     }

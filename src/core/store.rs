@@ -6,29 +6,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
-use std::sync::{Arc, Mutex};
+use std::{
+    convert::TryInto,
+    sync::{Arc, Mutex},
+};
 
-use crate::core::dispatch::TargetStore;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Tag(usize);
-
-impl Tag {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
-    pub fn new(tag: usize) -> Self {
-        Self(tag)
-    }
-
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
-    pub fn into_usize(self) -> usize {
-        self.0
-    }
-}
+use crate::core::{dispatch::TargetStore, ObjectId};
 
 #[derive(Debug)]
-pub struct TargetStoreImpl<SI> {
+pub struct ObjectMap<SI> {
     shared: Arc<Shared<SI>>,
 }
 
@@ -43,10 +29,11 @@ struct State<SI> {
     default_tag: usize,
 }
 
-impl<SI> TargetStoreImpl<SI> {
+impl<SI> ObjectMap<SI> {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
-    pub fn new(Tag(default_tag): Tag, default: SI) -> Self {
+    pub fn new(ObjectId(default_tag): ObjectId, default: SI) -> Self {
+        let default_tag = default_tag.try_into().unwrap();
         let mut inner = Vec::with_capacity(default_tag + 1);
         inner.resize_with(default_tag, || None);
         inner.push(Some(Arc::new(default)));
@@ -59,11 +46,12 @@ impl<SI> TargetStoreImpl<SI> {
     }
 }
 
-impl<SI> TargetStore<SI> for TargetStoreImpl<SI> {
-    type Tag = Tag;
+impl<SI> TargetStore<SI> for ObjectMap<SI> {
+    type Tag = ObjectId;
 
-    fn get(&self, Tag(tag): Tag) -> Arc<SI> {
+    fn get(&self, ObjectId(tag): ObjectId) -> Arc<SI> {
         let state = self.shared.state.lock().unwrap();
+        let tag: usize = tag.try_into().unwrap();
 
         match state.inner.get(tag) {
             Some(Some(target)) => target.clone(),
@@ -74,8 +62,9 @@ impl<SI> TargetStore<SI> for TargetStoreImpl<SI> {
         }
     }
 
-    fn add(&mut self, Tag(tag): Tag, target: SI) {
+    fn add(&mut self, ObjectId(tag): ObjectId, target: SI) {
         let mut state = self.shared.state.lock().unwrap();
+        let tag: usize = tag.try_into().unwrap();
 
         assert_ne!(
             tag, state.default_tag,
@@ -88,8 +77,9 @@ impl<SI> TargetStore<SI> for TargetStoreImpl<SI> {
         state.inner[tag] = Some(Arc::new(target));
     }
 
-    fn remove(&mut self, Tag(tag): Tag) {
+    fn remove(&mut self, ObjectId(tag): ObjectId) {
         let mut state = self.shared.state.lock().unwrap();
+        let tag: usize = tag.try_into().unwrap();
 
         assert_ne!(
             tag, state.default_tag,
@@ -100,7 +90,7 @@ impl<SI> TargetStore<SI> for TargetStoreImpl<SI> {
     }
 }
 
-impl<SI> Clone for TargetStoreImpl<SI> {
+impl<SI> Clone for ObjectMap<SI> {
     fn clone(&self) -> Self {
         Self {
             shared: self.shared.clone(),
