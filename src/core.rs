@@ -19,6 +19,7 @@ use snafu::Snafu;
 
 mod codec;
 mod dispatch;
+mod store;
 mod transport;
 
 /// An argument type for a [Wayland] message.
