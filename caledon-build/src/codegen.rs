@@ -43,16 +43,24 @@ where
         |i| i.requests(),
         |p| p.protocol_requests_ident(),
     );
+    let request_has_fd_entries = generate_has_fd_entries(
+        protocols.clone(),
+        requests_ident.clone(),
+    );
     let handle_event_entries = generate_handler_entries(
         protocols.clone(),
         events_ident.clone(),
         |i| i.events(),
         |p| p.protocol_events_ident(),
     );
+    let event_has_fd_entries = generate_has_fd_entries(
+        protocols.clone(),
+        events_ident.clone()
+    );
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
-        use crate::core::{MessageHandler, ProtocolFamily, ProtocolFamilyMessageList};
+        use crate::core::{Interface, MessageHandler, MessageList, OpCode, ProtocolFamily, ProtocolFamilyMessageList};
 
         #[doc = "The list of protocols implemented by caledon."]
         pub enum Protocols {
@@ -73,6 +81,18 @@ where
             type Requests = Requests;
 
             type Events = Events;
+
+            fn request_has_fd(&self, opcode: OpCode) -> bool {
+                match self {
+                    #(#request_has_fd_entries)*
+                }
+            }
+
+            fn event_has_fd(&self, opcode: OpCode) -> bool {
+                match self {
+                    #(#event_has_fd_entries)*
+                }
+            }
         }
 
         impl ProtocolFamilyMessageList for #requests_ident {
@@ -247,6 +267,10 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
         .requests()
         .enumerate()
         .map(generate_request_from_op_entry);
+    let request_has_fd_entries = interface
+        .requests()
+        .enumerate()
+        .map(generate_has_fd_entry);
     let event_entries = interface.events().map(generate_event_entry);
     let events = interface.events().enumerate().map(generate_event);
     let event_factories = interface
@@ -256,6 +280,10 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
         .events()
         .enumerate()
         .map(generate_event_from_op_entry);
+    let event_has_fd_entries = interface
+        .events()
+        .enumerate()
+        .map(generate_has_fd_entry);
 
     quote! {
         #[doc = #interface_doc]
@@ -328,6 +356,13 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
                     #[allow(unreachable_code)]
                     Ok(item)
                 }
+
+                fn has_fd(opcode: OpCode) -> bool {
+                    match opcode {
+                        #(#request_has_fd_entries)*
+                        _ => false,
+                    }
+                }
             }
 
             #[doc = #evt_doc]
@@ -348,6 +383,13 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
                     #[allow(unreachable_code)]
                     Ok(item)
                  }
+
+                fn has_fd(opcode: OpCode) -> bool {
+                    match opcode {
+                        #(#event_has_fd_entries)*
+                        _ => false,
+                    }
+                }
              }
 
             #(#requests)*
@@ -490,6 +532,17 @@ fn generate_request_from_op_entry((opcode, request): (usize, &Request)) -> Token
     }
 }
 
+fn generate_has_fd_entry((opcode, args): (usize, impl Args)) -> TokenStream {
+    let has_fd = args.args().any(|arg| arg.type_name() == "fd");
+    let opcode: u16 = opcode
+        .try_into()
+        .expect("too many requests: opcode exceeds u16::MAX");
+
+    quote! {
+        #opcode => #has_fd,
+    }
+}
+
 fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
     let event_ident = event.event_ident();
     let event_doc = format_long_doc(event, |name| format!("The {} event.", name));
@@ -613,6 +666,28 @@ where
         let menum_entry = m.enum_entry_ident();
         quote! {
             #ident::#penum_entry(self::#pmod::#pmlist_entry::#ienum_entry(self::#pmod::#imod::#ident::#menum_entry(msg))) => handler.handle(msg)
+        }
+    })
+}
+
+fn generate_has_fd_entries<'a, I>(
+    iter: I,
+    ident: Ident,
+) -> impl Iterator<Item = TokenStream> + 'a
+where
+    I: Iterator<Item = &'a Protocol> + 'a,
+{
+    iter.flat_map(move |p| {
+        let penum_entry = p.enum_entry_ident();
+        let pmod = p.mod_ident();
+        let pmlist_entry = p.protocol_ident();
+        p.interfaces().map(move |i| (penum_entry.clone(), pmod.clone(), pmlist_entry.clone(), i))
+    }).map(move |(penum_entry, pmod, pmlist_entry, i)| {
+        let ienum_entry = i.enum_entry_ident();
+        let iface = i.interface_ident();
+
+        quote! {
+            Protocols::#penum_entry(self::#pmod::#pmlist_entry::#ienum_entry(_)) => <self::#pmod::#iface as Interface>::#ident::has_fd(opcode),
         }
     })
 }

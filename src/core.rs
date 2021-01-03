@@ -135,6 +135,9 @@ pub trait MessageList: Sized {
         opcode: OpCode,
         maker: MM,
     ) -> Result<Self, FromOpcodeError<MM::Error>>;
+
+    /// Check if the given `OpCode` represents a message that passes an `Fd`.
+    fn has_fd(opcode: OpCode) -> bool;
 }
 
 /// The possible errors when creating a `MessageList` item from an `OpCode`.
@@ -265,6 +268,14 @@ pub trait ProtocolFamily {
 
     /// A list of the event messages associated with this `ProtocolFamily`.
     type Events: ProtocolFamilyMessageList;
+
+    /// Check if a request message with the given `OpCode` for this element
+    /// has an `Fd`.
+    fn request_has_fd(&self, opcode: OpCode) -> bool;
+
+    /// Check if an event message with the given `OpCode` for this element
+    /// has an `Fd`.
+    fn event_has_fd(&self, opcode: OpCode) -> bool;
 }
 
 // === type alaises and utility traits ===

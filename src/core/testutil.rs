@@ -74,6 +74,10 @@ impl MessageList for Requests {
 
         Ok(item)
     }
+
+    fn has_fd(_opcode: super::OpCode) -> bool {
+        false
+    }
 }
 impl From<DestroyRequest> for Requests {
     fn from(d: DestroyRequest) -> Self {
@@ -174,6 +178,14 @@ impl MessageList for Events {
 
         Ok(item)
     }
+
+    fn has_fd(opcode: super::OpCode) -> bool {
+        match opcode {
+            0 => false,
+            1 => true,
+            _ => panic!("Unknown opcode"),
+        }
+    }
 }
 impl From<PreFdEvent> for Events {
     fn from(p: PreFdEvent) -> Self {
@@ -265,6 +277,19 @@ impl ProtocolFamily for Protocols {
     type Requests = FamilyRequests;
 
     type Events = FamilyEvents;
+
+    fn request_has_fd(&self, opcode: super::OpCode) -> bool {
+        match self {
+            Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(_)) => <FdPasser as Interface>::Requests::has_fd(opcode),
+        }
+    }
+
+    fn event_has_fd(&self, opcode: super::OpCode) -> bool {
+
+        match self {
+            Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(_)) => <FdPasser as Interface>::Events::has_fd(opcode),
+        }
+    }
 }
 impl From<BuildTimeWaylandTests> for Protocols {
     fn from(b: BuildTimeWaylandTests) -> Self {
