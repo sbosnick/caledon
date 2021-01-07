@@ -8,14 +8,16 @@
 
 use std::{
     convert::TryInto,
+    marker::PhantomData,
     sync::{Arc, Mutex},
 };
 
-use crate::core::{dispatch::TargetStore, ObjectId};
+use super::{dispatch::TargetStore, transport::MessageFdMap, HasFd, ObjectId, Role};
 
 #[derive(Debug)]
-pub struct ObjectMap<SI> {
+pub(crate) struct ObjectMap<SI, R> {
     shared: Arc<Shared<SI>>,
+    _phantom: PhantomData<R>,
 }
 
 #[derive(Debug)]
@@ -29,10 +31,13 @@ struct State<SI> {
     default_tag: usize,
 }
 
-impl<SI> ObjectMap<SI> {
+impl<SI, R> ObjectMap<SI, R>
+where
+    R: Role,
+{
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
-    pub fn new(ObjectId(default_tag): ObjectId, default: SI) -> Self {
+    pub fn new(ObjectId(default_tag): ObjectId, default: SI, _role: R) -> Self {
         let default_tag = default_tag.try_into().unwrap();
         let mut inner = Vec::with_capacity(default_tag + 1);
         inner.resize_with(default_tag, || None);
@@ -42,11 +47,12 @@ impl<SI> ObjectMap<SI> {
             shared: Arc::new(Shared {
                 state: Mutex::new(State { inner, default_tag }),
             }),
+            _phantom: PhantomData,
         }
     }
 }
 
-impl<SI> TargetStore<SI> for ObjectMap<SI> {
+impl<SI, R> TargetStore<SI> for ObjectMap<SI, R> {
     type Tag = ObjectId;
 
     fn get(&self, ObjectId(tag): ObjectId) -> Arc<SI> {
@@ -90,10 +96,65 @@ impl<SI> TargetStore<SI> for ObjectMap<SI> {
     }
 }
 
-impl<SI> Clone for ObjectMap<SI> {
+impl<SI, R> MessageFdMap for ObjectMap<SI, R>
+where
+    R: Role,
+    SI: HasFd<R>,
+{
+    fn message_has_fd(&self, ObjectId(tag): ObjectId, opcode: u16) -> bool {
+        let state = self.shared.state.lock().unwrap();
+        let tag: usize = tag.try_into().unwrap();
+
+        match state.inner.get(tag) {
+            Some(Some(target)) => target.has_fd(opcode),
+            Some(None) | None => false,
+        }
+    }
+}
+
+impl<SI, R> Clone for ObjectMap<SI, R> {
     fn clone(&self) -> Self {
         Self {
             shared: self.shared.clone(),
+            _phantom: PhantomData,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::core::{
+        testutil::{BuildTimeWaylandTests, FdPasser, Protocols},
+        ClientRole, ServerRole,
+    };
+
+    #[test]
+    fn object_map_has_fd_for_fd_event() {
+        let tag = ObjectId(0);
+        let object = Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(FdPasser {}));
+
+        let sut = ObjectMap::new(tag, object, ServerRole {});
+        let has_fd = sut.message_has_fd(tag, 1);
+
+        assert!(
+            has_fd,
+            "The FdEvent for an FdPasser was did not have an fd."
+        );
+    }
+
+    #[test]
+    fn object_map_has_no_fd_for_destroy_request() {
+        let tag = ObjectId(0);
+        let object = Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(FdPasser {}));
+
+        let sut = ObjectMap::new(tag, object, ClientRole {});
+        let has_fd = sut.message_has_fd(tag, 0);
+
+        assert!(
+            !has_fd,
+            "The DestroyRequest for an FdPasser was did have an fd."
+        );
     }
 }

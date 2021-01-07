@@ -75,7 +75,7 @@ pub trait TargetStore<SI> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{store::ObjectMap, ObjectId};
+    use crate::core::{store::ObjectMap, ObjectId, ServerRole};
 
     use std::{
         iter,
@@ -117,7 +117,7 @@ mod tests {
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let targets = ObjectMap::new(tag, target);
+        let targets = ObjectMap::new(tag, target, ServerRole {});
 
         let _ = dispatcher(stream, |_| tag, targets).await;
 
@@ -134,7 +134,7 @@ mod tests {
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let targets = ObjectMap::new(tag1, target);
+        let targets = ObjectMap::new(tag1, target, ServerRole {});
 
         let _ = dispatcher(stream, |_| tag0, targets).await;
 
@@ -151,7 +151,7 @@ mod tests {
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let targets = ObjectMap::new(tag0, target);
+        let targets = ObjectMap::new(tag0, target, ServerRole {});
 
         let _ = dispatcher(stream, |_| tag1, targets).await;
 
@@ -164,7 +164,7 @@ mod tests {
         let tag = ObjectId(0);
         let stream = stream::empty::<Result<u8, ()>>();
         let target = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Continue);
-        let targets = ObjectMap::new(tag, target);
+        let targets = ObjectMap::new(tag, target, ServerRole {});
 
         let _ = dispatcher(stream, |_| tag, targets).await;
     }
@@ -182,7 +182,7 @@ mod tests {
             Arc::new(Mutex::new(None)),
             DispatchResult::Add(tag1, target1),
         );
-        let targets = ObjectMap::new(tag0, target0);
+        let targets = ObjectMap::new(tag0, target0, ServerRole {});
 
         let _ = dispatcher(stream, |tag| ObjectId(*tag as u32), targets).await;
 
@@ -200,7 +200,7 @@ mod tests {
         let inner = Arc::new(Mutex::new(None));
         let target1 = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Remove(tag1));
         let target0 = FakeTarget::new(inner.clone(), DispatchResult::Add(tag1, target1));
-        let targets = ObjectMap::new(tag0, target0);
+        let targets = ObjectMap::new(tag0, target0, ServerRole {});
 
         let _ = dispatcher(stream, |tag| ObjectId(*tag as u32), targets).await;
         let outcome = inner.lock().expect("Can't lock mutex");

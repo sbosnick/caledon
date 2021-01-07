@@ -328,6 +328,30 @@ where
 {
 }
 
+// Used as a trait bound to allow checking if a particular message
+// passes a file descriptor.
+pub(crate) trait HasFd<R: Role> {
+    fn has_fd(&self, opcode: OpCode) -> bool;
+}
+
+impl<PF> HasFd<ServerRole> for PF
+where
+    PF: ProtocolFamily,
+{
+    fn has_fd(&self, opcode: OpCode) -> bool {
+        self.event_has_fd(opcode)
+    }
+}
+
+impl<PF> HasFd<ClientRole> for PF
+where
+    PF: ProtocolFamily,
+{
+    fn has_fd(&self, opcode: OpCode) -> bool {
+        self.request_has_fd(opcode)
+    }
+}
+
 // === impl Fd ===
 
 impl AsRawFd for &Fd {
