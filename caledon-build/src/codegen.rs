@@ -345,6 +345,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
                     Ok(item)
                 }
 
+                #[allow(clippy::match_single_binding, clippy::match_like_matches_macro)]
                 fn has_fd(opcode: OpCode) -> bool {
                     match opcode {
                         #(#request_has_fd_entries)*
@@ -372,6 +373,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
                     Ok(item)
                  }
 
+                #[allow(clippy::match_single_binding, clippy::match_like_matches_macro)]
                 fn has_fd(opcode: OpCode) -> bool {
                     match opcode {
                         #(#event_has_fd_entries)*
