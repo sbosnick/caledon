@@ -464,6 +464,7 @@ impl Role for ServerRole {}
 struct ClientRole {}
 impl Role for ClientRole {}
 
+/// Internal module for sealing [`Argument`] and [`Signature`]
 mod private {
     use super::codec::{ArgDecoder, ArgEncoder};
     use super::transport::{ArgDequeueFd, ArgEnqueueFd};

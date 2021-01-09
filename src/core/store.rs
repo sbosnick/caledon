@@ -6,6 +6,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
+//! The storage for the the live protocol objects.
+//!
+//! An [`ObjectMap`] bridges the [`transport`] and [`dispatch`] modules
+//! with its implementations of [`MessageFdMap`] and [`TargetStore`]
+//! respectively.
+//!
+//! [`transport`]: super::transport
+//! [`dispatch`]: super::dispatch
+
 use std::{
     convert::TryInto,
     marker::PhantomData,
@@ -14,6 +23,7 @@ use std::{
 
 use super::{dispatch::TargetStore, transport::MessageFdMap, HasFd, ObjectId, Role};
 
+/// A concurancy safe map from an [`ObjectId`] to a live protocol object.
 #[derive(Debug)]
 pub(crate) struct ObjectMap<SI, R> {
     shared: Arc<Shared<SI>>,

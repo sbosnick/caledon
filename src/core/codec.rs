@@ -6,6 +6,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
+//! The byte stream part of the [Wayland] wire protocol without the fd passing.
+//!
+//! A [`WaylandCodec`] encodes and decodes the messages of a particular
+//! [`ProtocolFamily`]. The fd passing is layered on top of this in the
+//! [`transport`] module.
+//!
+//! The [`WaylandCodec`] has a particular [`Role`]. For the [`ServerRole`] it
+//! encodes event messages and decodes request messages. For the [`ClientRole`]
+//! these are reversed.
+//!
+//! [Wayland]: https://wayland.freedesktop.org/
+//! [`transport`]: super::transport
+
 use std::ffi::{self, CString};
 use std::fmt::Debug;
 use std::io;
@@ -26,24 +39,24 @@ use super::{
 
 /// `WaylandCodec` provides the byte stream part of the [Wayland] wire protocol.
 ///
-/// The `Decoder` and `Encoder` implementations on `WaylandCodec` allow for decoding
+/// The [`Decoder`] and [`Encoder`] implementations on `WaylandCodec` allow for decoding
 /// and encoding [Wayland] `Message`'s, but do not implement the fd passing that is a
 /// part of the wire protocol. The fd passing must be layered on top of a transport
 /// dervided from `WaylandCodec`.
 ///
-/// Encoding `Message`'s is done directly. That is, an implementation of `Message` is
+/// Encoding [`Message`]'s is done directly. That is, an implementation of [`Message`] is
 /// passed to `encode()` directly and it's wire protocol representation is encoded
 /// (except for fd passing as noted above).
 ///
-/// Decoding `Message`'s, on the other hand, is a two-step process. The `Decoder` for
-/// a `WaylandCodec` decodes a `DispatchMessage` which provides enough information to
-/// dispatch the message. Once the message has been dispatch and its `Signature` is
-/// known, `DispatchMessage::extract_args()` will extract the arguments for that
+/// Decoding [`Message`]'s, on the other hand, is a two-step process. The [`Decoder`] for
+/// a `WaylandCodec` decodes a [`DispatchMessage`] which provides enough information to
+/// dispatch the message. Once the message has been dispatch and its [`Signature`] is
+/// known, [`DispatchMessage::extract_args()`] will extract the arguments for that
 /// message.
 ///
-/// `WaylandCodec` is paramaterized by a `Role` (server or client) and a
-/// `ProtocolFamily`. These are used at complile time to enforce encoding only
-/// messages for the `ProtocolFamily` and to enforce encoding only requests for
+/// `WaylandCodec` is paramaterized by a [`Role`] (server or client) and a
+/// [`ProtocolFamily`]. These are used at complile time to enforce encoding only
+/// messages for the [`ProtocolFamily`] and to enforce encoding only requests for
 /// clients and events for servers.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/

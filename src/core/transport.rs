@@ -6,6 +6,24 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
+//! The full [Wayland] wire protocol including fd passing.
+//!
+//! A [`WaylandTransport`] layers fd passing on top of the byte stream part of
+//! the [Wayland] wire protocol from [`codec`] to implment the full [Wayland]
+//! wire protocol over an underlying transport mechanism. The underlying
+//! transport mechanism is a type that implements all of [`AsyncRead`], [`AsyncWrite`]
+//! [`EnqueueFd`] and [`DequeueFd`].
+//!
+//! The [`WaylandTransport`] provides a [`Stream`] of incoming [`Message`]'s and a
+//! [`Sink`] for outgoing [`Message`]'s for a particular [`ProtocolFamily`]. It is
+//! paramaterized by a particular [`Role`] to determine which [`Message`]'s go in
+//! which direction. For the [`ServerRole`] there is a [`Stream`] of request
+//! messages and a [`Sink`] of event messages. For the [`ClientRole`] these are
+//! reversed.
+//!
+//! [Wayland]: https://wayland.freedesktop.org/
+//! [`Role`]: super::Role
+
 use std::ffi::CString;
 use std::fmt::Debug;
 use std::pin::Pin;
@@ -32,36 +50,37 @@ use super::{
 /// `WaylandTransport` is the [Wayland] wire protocol including file descriptor
 /// passing.
 ///
-/// The `Stream` and `Sink` implementations on `WaylandTransport` allow receiving and
-/// sending [Wayland] `Message`'s. They use a `WaylandCodec` for encoding and
+/// The [`Stream`] and [`Sink`] implementations on `WaylandTransport` allow receiving and
+/// sending [Wayland] [`Message`]'s. They use a [`WaylandCodec`] for encoding and
 /// decoding the byte stream of the message and then layer file descriptor passing on
 /// top of that.
 ///
-/// Sending a message through the `Sink` is done directly. That is, and implemention
-/// of `Message` is passed to `start_send()` directly and its wire protocol
+/// Sending a message through the [`Sink`] is done directly. That is, and implemention
+/// of [`Message`] is passed to `start_send()` directly and its wire protocol
 /// representation is sent accross the transport.
 ///
-/// Receiving a message through the `Stream`, on the other hand, is a two-step
-/// process. The `Stream` receives a `DispatchMessage` which contians enough
+/// Receiving a message through the [`Stream`], on the other hand, is a two-step
+/// process. The [`Stream`] receives a [`DispatchMessage`] which contians enough
 /// information to dispatch the message. Onc the message has been dispatched and its
-/// `Signature` is known, `DispatchMessage::extract_args()` will extract the
+/// [`Signature`] is known, [`DispatchMessage::extract_args()`] will extract the
 /// arguments for that message (including any passed file descriptor).
 ///
 /// `WaylandTransport` currently assumes that each [Wayland] message has at most 1
 /// file descriptor being passed.
 ///
-/// `WaylandTransport` is paramaterized by a `Role` (server or client) and a
-/// `ProtocolFamily`. These are used at complile time to enforce encoding only
-/// messages for the `ProtocolFamily` and to enforce encoding only requests for
+/// `WaylandTransport` is paramaterized by a [`Role`] (server or client) and a
+/// [`ProtocolFamily`]. These are used at complile time to enforce encoding only
+/// messages for the [`ProtocolFamily`] and to enforce encoding only requests for
 /// clients and events for servers.
 ///
 /// `WaylandTransport` is built on top of an underlying transport that implements
-/// `AsyncWrite`, `AsyncRead`, `EnqueueFd`, and `DequeueFd` (the latter two from the
-/// `fd-queue` crate). It also requires a `MessageFdMap` to identify which messages
+/// [`AsyncWrite`], [`AsyncRead`], [`EnqueueFd`], and [`DequeueFd`] (the latter two from the
+/// `fd-queue` crate). It also requires a [`MessageFdMap`] to identify which messages
 /// (based on their object id and opcode) are accompanided by file descriptor
 /// passing.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
+/// [`Role`]: super::Role
 #[pin_project]
 pub struct WaylandTransport<T, R, P, M> {
     #[pin]

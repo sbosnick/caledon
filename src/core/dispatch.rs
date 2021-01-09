@@ -6,11 +6,35 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms
 
+//! The bridge between the [Wayland] wire protocol and its higher level
+//! protocol for incoming [`Message`]'s.
+//!
+//! The [`dispatcher`] consumes a [`Stream`] of [`Message`]'s and resolves when
+//! the [`Stream`] is finished. It will dispatach each [`Message`] to a [`Target`]
+//! in the provided [`TargetStore`] and will update the [`TargetStore`] depending
+//! on the [`DispatchResult`].
+//!
+//! [Wayland]: https://wayland.freedesktop.org/
+//! [`Message`]: super::Message
+//! [`Stream`]: futures_core::Stream
+
 use std::{future::Future, sync::Arc};
 
 use futures_core::TryStream;
 use futures_util::TryStreamExt as _;
 
+/// Dispatches a [`Stream`] of incoming [`Message`]'s to the [`Target`]'s in a
+/// [`TargetStore`].
+///
+/// `dispatcher` will resolve when the [`Stream`] either returns an error or
+/// ends. For each item in the [`Stream`] (which is intended to be a
+/// [`Message`]) `dispatcher` will use `f` to extract the tag of the message
+/// and then use that tag to look up the [`Target`] in the [`TargetStore`]. It
+/// will dispatach the item to that [`Target`] and update the [`TargetStore`]
+/// depending  on the [`DispatchResult`].
+///
+/// [`Message`]: super::Message
+/// [`Stream`]: futures_core::Stream
 // TODO: remove this when it is no longer needed
 #[allow(dead_code)]
 pub async fn dispatcher<ST, SI, F, G, T, TS>(stream: ST, f: F, targets: TS) -> Result<(), ST::Error>
@@ -48,6 +72,7 @@ where
         .await
 }
 
+/// Interface for the dispatch target of the [`dispatcher`].
 pub trait Target<T, F>: Sized
 where
     F: Future<Output = DispatchResult<Self::Tag, Self>>,
@@ -57,6 +82,11 @@ where
     fn dispatch(&self, item: T) -> F;
 }
 
+/// The result of a [`dispatch`] operation.
+///
+/// [`dispatcher`] will use this result to update its [`TargetStore`].
+///
+/// [`dispatch`]: Target::dispatch
 #[derive(Debug, Clone)]
 pub enum DispatchResult<Tag, SI> {
     Add(Tag, SI),
@@ -64,6 +94,8 @@ pub enum DispatchResult<Tag, SI> {
     Continue,
 }
 
+/// Interface for the storage of the live dispatch [`Target`]'s for
+/// [`dispatcher`].
 pub trait TargetStore<SI> {
     type Tag;
 
