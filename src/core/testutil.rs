@@ -280,14 +280,17 @@ impl ProtocolFamily for Protocols {
 
     fn request_has_fd(&self, opcode: super::OpCode) -> bool {
         match self {
-            Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(_)) => <FdPasser as Interface>::Requests::has_fd(opcode),
+            Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(_)) => {
+                <FdPasser as Interface>::Requests::has_fd(opcode)
+            }
         }
     }
 
     fn event_has_fd(&self, opcode: super::OpCode) -> bool {
-
         match self {
-            Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(_)) => <FdPasser as Interface>::Events::has_fd(opcode),
+            Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(_)) => {
+                <FdPasser as Interface>::Events::has_fd(opcode)
+            }
         }
     }
 }

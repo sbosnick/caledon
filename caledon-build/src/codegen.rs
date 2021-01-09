@@ -43,20 +43,14 @@ where
         |i| i.requests(),
         |p| p.protocol_requests_ident(),
     );
-    let request_has_fd_entries = generate_has_fd_entries(
-        protocols.clone(),
-        requests_ident.clone(),
-    );
+    let request_has_fd_entries = generate_has_fd_entries(protocols.clone(), requests_ident.clone());
     let handle_event_entries = generate_handler_entries(
         protocols.clone(),
         events_ident.clone(),
         |i| i.events(),
         |p| p.protocol_events_ident(),
     );
-    let event_has_fd_entries = generate_has_fd_entries(
-        protocols.clone(),
-        events_ident.clone()
-    );
+    let event_has_fd_entries = generate_has_fd_entries(protocols.clone(), events_ident.clone());
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
@@ -267,10 +261,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
         .requests()
         .enumerate()
         .map(generate_request_from_op_entry);
-    let request_has_fd_entries = interface
-        .requests()
-        .enumerate()
-        .map(generate_has_fd_entry);
+    let request_has_fd_entries = interface.requests().enumerate().map(generate_has_fd_entry);
     let event_entries = interface.events().map(generate_event_entry);
     let events = interface.events().enumerate().map(generate_event);
     let event_factories = interface
@@ -280,10 +271,7 @@ fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStr
         .events()
         .enumerate()
         .map(generate_event_from_op_entry);
-    let event_has_fd_entries = interface
-        .events()
-        .enumerate()
-        .map(generate_has_fd_entry);
+    let event_has_fd_entries = interface.events().enumerate().map(generate_has_fd_entry);
 
     quote! {
         #[doc = #interface_doc]
@@ -670,10 +658,7 @@ where
     })
 }
 
-fn generate_has_fd_entries<'a, I>(
-    iter: I,
-    ident: Ident,
-) -> impl Iterator<Item = TokenStream> + 'a
+fn generate_has_fd_entries<'a, I>(iter: I, ident: Ident) -> impl Iterator<Item = TokenStream> + 'a
 where
     I: Iterator<Item = &'a Protocol> + 'a,
 {
