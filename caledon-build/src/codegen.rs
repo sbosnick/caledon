@@ -39,90 +39,147 @@ where
     for protocol in protocols.clone() {
         writeln!(file, "//     {}", protocol.path().display()).map_err(Error::file_write)?;
     }
-
-    let entries = protocols.clone().map(generate_protocol_list_entry);
-    let request_entries = protocols.clone().map(generate_family_request_entry);
-    let event_entries = protocols.clone().map(generate_family_event_entry);
     let requests_ident = format_ident!("Requests");
     let events_ident = format_ident!("Events");
-    let handle_request_entries = generate_handler_entries(
+    let protocol_family = generate_protocol_family(
         protocols.clone(),
         requests_ident.clone(),
-        |i| i.requests(),
-        |p| p.protocol_requests_ident(),
-    );
-    let request_has_fd_entries = generate_has_fd_entries(protocols.clone(), requests_ident.clone());
-    let handle_event_entries = generate_handler_entries(
-        protocols.clone(),
         events_ident.clone(),
-        |i| i.events(),
-        |p| p.protocol_events_ident(),
     );
-    let event_has_fd_entries = generate_has_fd_entries(protocols.clone(), events_ident.clone());
+    let protocol_family_request_messages =
+        generate_pf_request_messages(protocols.clone(), requests_ident);
+    let protocol_family_event_messages =
+        generate_pf_event_messages(protocols.clone(), events_ident);
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
         use crate::core::{Interface, MessageHandler, MessageList, OpCode, ProtocolFamily, ProtocolFamilyMessageList};
 
-        #[doc = "The list of protocols implemented by caledon."]
-        pub enum Protocols {
-            #(#entries,)*
-        }
+        #protocol_family
 
-        impl ProtocolFamily for Protocols {
-            type Requests = Requests;
+        #protocol_family_request_messages
 
-            type Events = Events;
-
-            fn request_has_fd(&self, opcode: OpCode) -> bool {
-                match self {
-                    #(#request_has_fd_entries)*
-                }
-            }
-
-            fn event_has_fd(&self, opcode: OpCode) -> bool {
-                match self {
-                    #(#event_has_fd_entries)*
-                }
-            }
-        }
-
-        #[doc = "The list of the requests associate with the protocols implemented by caledon."]
-        pub enum #requests_ident {
-            #(#request_entries,)*
-        }
-
-        impl ProtocolFamilyMessageList for #requests_ident {
-            type ProtocolFamily = Protocols;
-
-            fn handle_message<MH: MessageHandler>(&self, mut handler: MH) -> Result<(), MH::Error> {
-                match self {
-                    #(#handle_request_entries,)*
-                    _ => panic!("Unrecognized message dispatched to handle message!"),
-                }
-            }
-        }
-
-        #[doc = "The list of the events associate with the protocols implemented by caledon."]
-        pub enum #events_ident {
-            #(#event_entries,)*
-        }
-
-        impl ProtocolFamilyMessageList for #events_ident {
-            type  ProtocolFamily = Protocols;
-
-            fn handle_message<MH: MessageHandler>(&self, mut handler: MH) -> Result<(), MH::Error> {
-                match self {
-                    #(#handle_event_entries,)*
-                    _ => panic!("Unrecognized message dispatched to handle message!"),
-                }
-            }
-         }
+        #protocol_family_event_messages
 
         #(#modules)*
     };
 
     write!(file, "{}", output).map_err(Error::file_write)
+}
+
+fn generate_protocol_family<'a, I>(
+    protocols: I,
+    requests_ident: Ident,
+    events_ident: Ident,
+) -> TokenStream
+where
+    I: Iterator<Item = &'a Protocol> + Clone + 'a,
+{
+    let entries = protocols.clone().map(generate_protocol_list_entry);
+    let request_has_fd_entries = generate_has_fd_entries(protocols.clone(), requests_ident.clone());
+    let event_has_fd_entries = generate_has_fd_entries(protocols.clone(), events_ident.clone());
+
+    quote! {
+            #[doc = "The list of protocols implemented by caledon."]
+            pub enum Protocols {
+                #(#entries,)*
+            }
+
+            impl ProtocolFamily for Protocols {
+                type Requests = #requests_ident;
+
+                type Events = #events_ident;
+
+                fn request_has_fd(&self, opcode: OpCode) -> bool {
+                    match self {
+                        #(#request_has_fd_entries)*
+                    }
+                }
+
+                fn event_has_fd(&self, opcode: OpCode) -> bool {
+                    match self {
+                        #(#event_has_fd_entries)*
+                    }
+                }
+            }
+
+    }
+}
+
+fn generate_pf_request_messages<'a, I>(protocols: I, ident: Ident) -> TokenStream
+where
+    I: Iterator<Item = &'a Protocol> + Clone + 'a,
+{
+    generate_pf_message_list(
+        protocols.clone(),
+        ident.clone(),
+        &"requests",
+        generate_family_request_entry,
+        |i| i.requests(),
+        |p| p.protocol_requests_ident(),
+    )
+}
+
+fn generate_pf_event_messages<'a, I>(protocols: I, ident: Ident) -> TokenStream
+where
+    I: Iterator<Item = &'a Protocol> + Clone + 'a,
+{
+    generate_pf_message_list(
+        protocols.clone(),
+        ident.clone(),
+        &"events",
+        generate_family_event_entry,
+        |i| i.events(),
+        |p| p.protocol_events_ident(),
+    )
+}
+
+fn generate_pf_message_list<'a, I, F, G, H, M, MI>(
+    protocols: I,
+    ident: Ident,
+    doc_word: &str,
+    generate_family_entry: F,
+    get_interface_messages: G,
+    get_messages_ident: H,
+) -> TokenStream
+where
+    I: Iterator<Item = &'a Protocol> + Clone + 'a,
+    F: Fn(&Protocol) -> TokenStream,
+    G: Fn(&'a Interface) -> MI + 'a,
+    H: Fn(&'a Protocol) -> Ident + 'a,
+    M: Message,
+    MI: Iterator<Item = M> + 'a,
+{
+    let enum_doc = format!(
+        "The list of the {} associated with the protocols implemented by caledon.",
+        doc_word
+    );
+    let entries = protocols.clone().map(generate_family_entry);
+    let handle_entries = generate_handler_entries(
+        protocols.clone(),
+        ident.clone(),
+        get_interface_messages,
+        get_messages_ident,
+    );
+
+    quote! {
+            #[doc = #enum_doc]
+            pub enum #ident {
+                #(#entries,)*
+            }
+
+            impl ProtocolFamilyMessageList for #ident {
+                type ProtocolFamily = Protocols;
+
+                fn handle_message<MH: MessageHandler>(&self, mut handler: MH) -> Result<(), MH::Error> {
+                    match self {
+                        #(#handle_entries,)*
+                        _ => panic!("Unrecognized message dispatched to handle message!"),
+                    }
+                }
+            }
+
+    }
 }
 
 fn generate_protocol_list_entry(protocol: &Protocol) -> TokenStream {
