@@ -77,7 +77,7 @@ where
 {
     let entries = protocols.clone().map(generate_protocol_list_entry);
     let request_has_fd_entries = generate_has_fd_entries(protocols.clone(), requests_ident.clone());
-    let event_has_fd_entries = generate_has_fd_entries(protocols.clone(), events_ident.clone());
+    let event_has_fd_entries = generate_has_fd_entries(protocols, events_ident.clone());
 
     quote! {
             #[doc = "The list of protocols implemented by caledon."]
@@ -111,8 +111,8 @@ where
     I: Iterator<Item = &'a Protocol> + Clone + 'a,
 {
     generate_pf_message_list(
-        protocols.clone(),
-        ident.clone(),
+        protocols,
+        ident,
         &"requests",
         generate_family_request_entry,
         |i| i.requests(),
@@ -125,8 +125,8 @@ where
     I: Iterator<Item = &'a Protocol> + Clone + 'a,
 {
     generate_pf_message_list(
-        protocols.clone(),
-        ident.clone(),
+        protocols,
+        ident,
         &"events",
         generate_family_event_entry,
         |i| i.events(),
@@ -156,7 +156,7 @@ where
     );
     let entries = protocols.clone().map(generate_family_entry);
     let handle_entries = generate_handler_entries(
-        protocols.clone(),
+        protocols,
         ident.clone(),
         get_interface_messages,
         get_messages_ident,
