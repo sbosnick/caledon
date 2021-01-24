@@ -16,6 +16,9 @@
 
 #![deny(missing_docs, warnings)]
 
+use fd_queue::{DequeueFd, EnqueueFd};
+use tokio::io::{AsyncRead, AsyncWrite};
+
 pub mod core;
 
 /// The generated types for the [Wayland] protocol XML files.
@@ -24,3 +27,20 @@ pub mod core;
 pub mod protocols {
     include!(concat!(env!("OUT_DIR"), "/protocols.rs"));
 }
+
+/// Interface for the underlying communication channel on which the [Wayland]
+/// protocol is layered.
+///
+/// The [Wayland] protocol requires a communication channel that is a bi-directional
+/// byte stream that can pass file descriptors. In practice this means Unix domain
+/// sockets, but the use of this trait allows the rest of `caledon` to rely on
+/// this abstraction.
+///
+/// This trait is intended to be used as a trait bound and should not be
+/// implemented directly. The blanket implementation should be the only
+/// implementation of the trait.
+///
+/// [Wayland]: https://wayland.freedesktop.org/
+pub trait IoChannel: AsyncRead + AsyncWrite + EnqueueFd + DequeueFd {}
+
+impl<C> IoChannel for C where C: AsyncWrite + AsyncRead + EnqueueFd + DequeueFd {}

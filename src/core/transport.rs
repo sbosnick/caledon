@@ -12,7 +12,8 @@
 //! the [Wayland] wire protocol from [`codec`] to implment the full [Wayland]
 //! wire protocol over an underlying transport mechanism. The underlying
 //! transport mechanism is a type that implements all of [`AsyncRead`], [`AsyncWrite`]
-//! [`EnqueueFd`] and [`DequeueFd`].
+//! [`EnqueueFd`] and [`DequeueFd`]. This is expressed in this module through the
+//! [`IoChannel`] trait bound.
 //!
 //! The [`WaylandTransport`] provides a [`Stream`] of incoming [`Message`]'s and a
 //! [`Sink`] for outgoing [`Message`]'s for a particular [`ProtocolFamily`]. It is
@@ -22,13 +23,17 @@
 //! reversed.
 //!
 //! [Wayland]: https://wayland.freedesktop.org/
+//! [`IoChannel`]: crate::IoChannel
 //! [`Role`]: super::Role
+//! [`DequeueFd`]: fd_queue::DequeueFd
+//! [`AsyncRead`]: tokio::io::AsyncRead
+//! [`AsyncWrite`]: tokio::io::AsyncWrite
 
 use std::ffi::CString;
 use std::fmt::Debug;
 use std::pin::Pin;
 
-use fd_queue::{DequeueFd, EnqueueFd, QueueFullError};
+use fd_queue::{EnqueueFd, QueueFullError};
 use futures_core::{
     stream::Stream,
     task::{Context, Poll},
@@ -36,8 +41,10 @@ use futures_core::{
 use futures_sink::Sink;
 use pin_project::pin_project;
 use snafu::{ResultExt, Snafu};
-use tokio::io::{AsyncRead, AsyncWrite};
+
 use tokio_util::codec::{Decoder, Framed};
+
+use crate::IoChannel;
 
 use super::{
     codec::{self, CodecError as CodecErr, WaylandCodec},
@@ -81,6 +88,9 @@ use super::{
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 /// [`Role`]: super::Role
+/// [`DequeueFd`]: fd_queue::DequeueFd
+/// [`AsyncRead`]: tokio::io::AsyncRead
+/// [`AsyncWrite`]: tokio::io::AsyncWrite
 #[pin_project]
 pub struct WaylandTransport<T, R, P, M> {
     #[pin]
@@ -90,7 +100,7 @@ pub struct WaylandTransport<T, R, P, M> {
 
 impl<T, R, P, M> WaylandTransport<T, R, P, M>
 where
-    T: AsyncWrite + AsyncRead,
+    T: IoChannel,
 {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
@@ -104,7 +114,7 @@ where
 
 impl<T, R, P, M> Stream for WaylandTransport<T, R, P, M>
 where
-    T: AsyncRead + Unpin + DequeueFd,
+    T: IoChannel + Unpin,
     M: MessageFdMap,
 {
     type Item = Result<DispatchMessage, TransportError>;
@@ -146,7 +156,7 @@ where
 impl<T, P, M> Sink<P::Events> for WaylandTransport<T, ServerRole, P, M>
 where
     P: ProtocolFamily,
-    T: AsyncWrite + Unpin + EnqueueFd,
+    T: IoChannel + Unpin,
 {
     type Error = TransportError;
 
@@ -176,7 +186,7 @@ where
 impl<T, P, M> Sink<P::Requests> for WaylandTransport<T, ClientRole, P, M>
 where
     P: ProtocolFamily,
-    T: AsyncWrite + Unpin + EnqueueFd,
+    T: IoChannel + Unpin,
 {
     type Error = TransportError;
 
@@ -491,11 +501,12 @@ mod tests {
     };
     use crate::core::{Decimal, Fd, ObjectId};
     use assert_matches::assert_matches;
+    use fd_queue::DequeueFd;
     use futures::executor::block_on;
     use futures::{sink::SinkExt, stream::StreamExt};
     use futures_ringbuf::RingBuffer as AsyncRingBuffer;
     use ringbuf::{Consumer, Producer, RingBuffer};
-    use tokio::io::ReadBuf;
+    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
     use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
 
     struct MockQueue(Option<RawFd>);
@@ -640,7 +651,7 @@ mod tests {
         }
     }
 
-    impl super::AsyncWrite for FakeEndpoint {
+    impl AsyncWrite for FakeEndpoint {
         fn poll_write(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
