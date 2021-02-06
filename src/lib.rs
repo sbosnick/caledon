@@ -19,6 +19,7 @@
 use fd_queue::{DequeueFd, EnqueueFd};
 use tokio::io::{AsyncRead, AsyncWrite};
 
+pub mod client;
 pub mod core;
 
 /// The generated types for the [Wayland] protocol XML files.

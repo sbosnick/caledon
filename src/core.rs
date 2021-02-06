@@ -21,6 +21,9 @@ mod codec;
 mod dispatch;
 mod store;
 mod transport;
+mod wire;
+
+pub(crate) use wire::{make_wire_protocol, WaylandState, WireError, WireRecv, WireSend, WireState};
 
 /// An argument type for a [Wayland] message.
 ///
@@ -458,10 +461,10 @@ impl fmt::Display for ConversionErrorType {
 /// clients.
 pub(crate) trait Role {}
 
-struct ServerRole {}
+pub(crate) struct ServerRole {}
 impl Role for ServerRole {}
 
-struct ClientRole {}
+pub(crate) struct ClientRole {}
 impl Role for ClientRole {}
 
 /// Internal module for sealing [`Argument`] and [`Signature`]
