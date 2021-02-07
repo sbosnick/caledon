@@ -143,13 +143,14 @@ mod tests {
 
     #[tokio::test]
     async fn dispatcher_dispatches_default_tag_to_default_target() {
-        let tag = ObjectId(0);
+        let tag = ObjectId(1);
         let item = 1;
         let result: Result<_, ()> = Ok(item);
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let targets = ObjectMap::new(tag, target, ServerRole {});
+        let mut targets = ObjectMap::new(ServerRole {});
+        targets.set_default(tag, target);
 
         let _ = dispatcher(stream, |_| tag, targets).await;
 
@@ -160,15 +161,16 @@ mod tests {
     #[tokio::test]
     async fn dispatcher_dispatches_unknown_tag_to_default_target() {
         let tag1 = ObjectId(1);
-        let tag0 = ObjectId(0);
+        let tag2 = ObjectId(2);
         let item = 1;
         let result: Result<_, ()> = Ok(item);
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let targets = ObjectMap::new(tag1, target, ServerRole {});
+        let mut targets = ObjectMap::new(ServerRole {});
+        targets.set_default(tag1, target);
 
-        let _ = dispatcher(stream, |_| tag0, targets).await;
+        let _ = dispatcher(stream, |_| tag2, targets).await;
 
         let outcome = inner.lock().expect("Can't lock mutex");
         assert_eq!(*outcome, Some(item));
@@ -176,14 +178,15 @@ mod tests {
 
     #[tokio::test]
     async fn dispatcher_dispatches_too_big_tag_to_default_target() {
-        let tag0 = ObjectId(0);
+        let tag2 = ObjectId(2);
         let tag1 = ObjectId(1);
         let item = 1;
         let result: Result<_, ()> = Ok(item);
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let targets = ObjectMap::new(tag0, target, ServerRole {});
+        let mut targets = ObjectMap::new(ServerRole {});
+        targets.set_default(tag2, target);
 
         let _ = dispatcher(stream, |_| tag1, targets).await;
 
@@ -193,28 +196,30 @@ mod tests {
 
     #[tokio::test]
     async fn dispatcher_dispatches_empty_stream() {
-        let tag = ObjectId(0);
+        let tag = ObjectId(1);
         let stream = stream::empty::<Result<u8, ()>>();
         let target = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Continue);
-        let targets = ObjectMap::new(tag, target, ServerRole {});
+        let mut targets = ObjectMap::new(ServerRole {});
+        targets.set_default(tag, target);
 
         let _ = dispatcher(stream, |_| tag, targets).await;
     }
 
     #[tokio::test]
     async fn dispatcher_dispatches_to_added_target() {
-        let tag0 = ObjectId(0);
+        let tag2 = ObjectId(2);
         let tag1 = ObjectId(1);
         let item = 1;
         let result: Result<u8, ()> = Ok(item);
-        let stream = stream::iter(vec![Ok(0), result]);
+        let stream = stream::iter(vec![Ok(2), result]);
         let inner = Arc::new(Mutex::new(None));
         let target1 = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let target0 = FakeTarget::new(
+        let target2 = FakeTarget::new(
             Arc::new(Mutex::new(None)),
             DispatchResult::Add(tag1, target1),
         );
-        let targets = ObjectMap::new(tag0, target0, ServerRole {});
+        let mut targets = ObjectMap::new(ServerRole {});
+        targets.set_default(tag2, target2);
 
         let _ = dispatcher(stream, |tag| ObjectId(*tag as u32), targets).await;
 
@@ -224,17 +229,19 @@ mod tests {
 
     #[tokio::test]
     async fn dispatcher_dispatches_removed_target_to_default_target() {
-        let tag0 = ObjectId(0);
+        let tag2 = ObjectId(2);
         let tag1 = ObjectId(1);
         let item = 1;
         let result: Result<u8, ()> = Ok(item);
-        let stream = stream::iter(vec![Ok(0), Ok(1), result]);
+        let stream = stream::iter(vec![Ok(2), Ok(1), result]);
         let inner = Arc::new(Mutex::new(None));
         let target1 = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Remove(tag1));
-        let target0 = FakeTarget::new(inner.clone(), DispatchResult::Add(tag1, target1));
-        let targets = ObjectMap::new(tag0, target0, ServerRole {});
+        let target2 = FakeTarget::new(inner.clone(), DispatchResult::Add(tag1, target1));
+        let mut targets = ObjectMap::new(ServerRole {});
+        targets.set_default(tag2, target2);
 
         let _ = dispatcher(stream, |tag| ObjectId(*tag as u32), targets).await;
+
         let outcome = inner.lock().expect("Can't lock mutex");
         assert_eq!(*outcome, Some(item));
     }
