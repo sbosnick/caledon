@@ -57,8 +57,6 @@ impl<SI, R> ObjectMap<SI, R>
 where
     R: Role,
 {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             shared: Arc::new(Shared {

@@ -104,8 +104,6 @@ impl<T, R, P, M> WaylandTransport<T, R, P, M>
 where
     T: IoChannel,
 {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn new(io: T, map: M) -> WaylandTransport<T, R, P, M> {
         WaylandTransport {
             inner: WaylandCodec::<R, P>::default().framed(io),
