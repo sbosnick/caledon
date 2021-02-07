@@ -23,7 +23,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use super::{dispatch::TargetStore, transport::MessageFdMap, HasFd, ObjectId, Role};
+use super::{
+    dispatch::TargetStore,
+    role::{HasFd, Role},
+    transport::MessageFdMap,
+    ObjectId,
+};
 
 /// A concurancy safe map from an [`ObjectId`] to a live protocol object.
 #[derive(Debug)]
@@ -54,7 +59,7 @@ where
 {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
-    pub fn new(_role: R) -> Self {
+    pub fn new() -> Self {
         Self {
             shared: Arc::new(Shared {
                 state: Mutex::new(State::default()),
@@ -243,8 +248,8 @@ mod tests {
     use super::*;
 
     use crate::core::{
+        role::{ClientRole, ServerRole},
         testutil::{BuildTimeWaylandTests, FdPasser, Protocols},
-        ClientRole, ServerRole,
     };
 
     #[test]
@@ -252,7 +257,7 @@ mod tests {
         let tag = ObjectId(1);
         let object = Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(FdPasser {}));
 
-        let mut sut = ObjectMap::new(ServerRole {});
+        let mut sut = ObjectMap::<_, ServerRole>::new();
         sut.set_default(tag, object);
         let has_fd = sut.message_has_fd(tag, 1);
 
@@ -267,7 +272,7 @@ mod tests {
         let tag = ObjectId(1);
         let object = Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(FdPasser {}));
 
-        let mut sut = ObjectMap::new(ClientRole {});
+        let mut sut = ObjectMap::<_, ClientRole>::new();
         sut.set_default(tag, object);
         let has_fd = sut.message_has_fd(tag, 0);
 

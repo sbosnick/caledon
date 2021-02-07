@@ -18,6 +18,8 @@
 //!
 //! [Wayland]: https://wayland.freedesktop.org/
 //! [`transport`]: super::transport
+//! [`ServerRole`]: super::role::ServerRole
+//! [`ClientRole`]: super::role::ClientRole
 
 use std::ffi::{self, CString};
 use std::fmt::Debug;
@@ -31,8 +33,8 @@ use snafu::Snafu;
 use tokio_util::codec::{Decoder, Encoder};
 
 use super::{
-    ClientRole, Message, MessageHandler, ObjectId, ProtocolFamily, ProtocolFamilyMessageList, Role,
-    ServerRole, Signature,
+    role::{Role, SendMsg},
+    Message, MessageHandler, ObjectId, ProtocolFamily, ProtocolFamilyMessageList, Signature,
 };
 
 // === WaylandCodec ===
@@ -90,27 +92,18 @@ where
     }
 }
 
-impl<P> Encoder<P::Events> for WaylandCodec<ServerRole, P>
+impl<R, P> Encoder<<P as SendMsg<R>>::Output> for WaylandCodec<R, P>
 where
-    P: ProtocolFamily,
+    P: ProtocolFamily + SendMsg<R>,
+    R: Role,
 {
     type Error = CodecError;
 
-    fn encode(&mut self, item: P::Events, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        item.handle_message(CodecHandler {
-            codec: self,
-            buffer: dst,
-        })
-    }
-}
-
-impl<P> Encoder<P::Requests> for WaylandCodec<ClientRole, P>
-where
-    P: ProtocolFamily,
-{
-    type Error = CodecError;
-
-    fn encode(&mut self, item: P::Requests, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(
+        &mut self,
+        item: <P as SendMsg<R>>::Output,
+        dst: &mut BytesMut,
+    ) -> Result<(), Self::Error> {
         item.handle_message(CodecHandler {
             codec: self,
             buffer: dst,
@@ -588,9 +581,12 @@ mod tests {
 
     use assert_matches::assert_matches;
 
-    use crate::core::testutil::{
-        BuildTimeWaylandTestsEvents, BuildTimeWaylandTestsRequest, DestroyRequest, Events,
-        FamilyEvents, FamilyRequests, PreFdEvent, Protocols, Requests,
+    use crate::core::{
+        role::{ClientRole, ServerRole},
+        testutil::{
+            BuildTimeWaylandTestsEvents, BuildTimeWaylandTestsRequest, DestroyRequest, Events,
+            FamilyEvents, FamilyRequests, PreFdEvent, Protocols, Requests,
+        },
     };
     use crate::core::{Decimal, Fd, ObjectId};
 

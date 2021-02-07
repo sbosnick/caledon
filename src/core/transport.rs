@@ -24,10 +24,11 @@
 //!
 //! [Wayland]: https://wayland.freedesktop.org/
 //! [`IoChannel`]: crate::IoChannel
-//! [`Role`]: super::Role
 //! [`DequeueFd`]: fd_queue::DequeueFd
 //! [`AsyncRead`]: tokio::io::AsyncRead
 //! [`AsyncWrite`]: tokio::io::AsyncWrite
+//! [`ClientRole`]: super::role::ClientRole
+//! [`ServerRole`]: super::role::ServerRole
 
 use std::ffi::CString;
 use std::fmt::Debug;
@@ -48,8 +49,9 @@ use crate::IoChannel;
 
 use super::{
     codec::{self, CodecError as CodecErr, WaylandCodec},
-    ClientRole, Fd, Message, MessageHandler, MessageMaker, ObjectId, ProtocolFamily,
-    ProtocolFamilyMessageList, ServerRole, Signature,
+    role::{Role, SendMsg, SendMsgType},
+    Fd, Message, MessageHandler, MessageMaker, ObjectId, ProtocolFamily, ProtocolFamilyMessageList,
+    Signature,
 };
 
 // === WaylandTransport ===
@@ -87,7 +89,7 @@ use super::{
 /// passing.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-/// [`Role`]: super::Role
+/// [`Role`]: super::role::Role
 /// [`DequeueFd`]: fd_queue::DequeueFd
 /// [`AsyncRead`]: tokio::io::AsyncRead
 /// [`AsyncWrite`]: tokio::io::AsyncWrite
@@ -104,7 +106,7 @@ where
 {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
-    fn new(io: T, map: M) -> WaylandTransport<T, R, P, M> {
+    pub fn new(io: T, map: M) -> WaylandTransport<T, R, P, M> {
         WaylandTransport {
             inner: WaylandCodec::<R, P>::default().framed(io),
             map,
@@ -153,63 +155,34 @@ where
     }
 }
 
-impl<T, P, M> Sink<P::Events> for WaylandTransport<T, ServerRole, P, M>
+impl<T, R, P, M> Sink<SendMsgType<R, P>> for WaylandTransport<T, R, P, M>
 where
-    P: ProtocolFamily,
+    P: ProtocolFamily + SendMsg<R>,
+    R: Role,
     T: IoChannel + Unpin,
 {
     type Error = TransportError;
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<P::Events>::poll_ready(self.project().inner, cx).map_err(|e| e.into())
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Sink::<SendMsgType<R, P>>::poll_ready(self.project().inner, cx).map_err(|e| e.into())
     }
 
-    fn start_send(self: Pin<&mut Self>, msg: P::Events) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, item: SendMsgType<R, P>) -> Result<(), Self::Error> {
         let mut inner = self.project().inner;
         let framed: &mut Framed<_, _> = &mut inner;
 
-        msg.handle_message(TransportHandler {
+        item.handle_message(TransportHandler {
             transport: framed.get_mut(),
         })?;
-        Sink::<P::Events>::start_send(inner, msg).map_err(|e| e.into())
+        Sink::<SendMsgType<R, P>>::start_send(inner, item).map_err(|e| e.into())
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<P::Events>::poll_flush(self.project().inner, cx).map_err(|e| e.into())
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Sink::<SendMsgType<R, P>>::poll_flush(self.project().inner, cx).map_err(|e| e.into())
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<P::Events>::poll_close(self.project().inner, cx).map_err(|e| e.into())
-    }
-}
-
-impl<T, P, M> Sink<P::Requests> for WaylandTransport<T, ClientRole, P, M>
-where
-    P: ProtocolFamily,
-    T: IoChannel + Unpin,
-{
-    type Error = TransportError;
-
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<P::Requests>::poll_ready(self.project().inner, cx).map_err(|e| e.into())
-    }
-
-    fn start_send(self: Pin<&mut Self>, msg: P::Requests) -> Result<(), Self::Error> {
-        let mut inner = self.project().inner;
-        let framed: &mut Framed<_, _> = &mut inner;
-
-        msg.handle_message(TransportHandler {
-            transport: framed.get_mut(),
-        })?;
-        Sink::<P::Requests>::start_send(inner, msg).map_err(|e| e.into())
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<P::Requests>::poll_flush(self.project().inner, cx).map_err(|e| e.into())
-    }
-
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::<P::Requests>::poll_close(self.project().inner, cx).map_err(|e| e.into())
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Sink::<SendMsgType<R, P>>::poll_close(self.project().inner, cx).map_err(|e| e.into())
     }
 }
 
@@ -496,8 +469,9 @@ mod tests {
     use std::io;
     use std::os::unix::io::{AsRawFd, RawFd};
 
-    use crate::core::testutil::{
-        BuildTimeWaylandTestsEvents, Events, FamilyEvents, FdEvent, Protocols,
+    use crate::core::{
+        role::ServerRole,
+        testutil::{BuildTimeWaylandTestsEvents, Events, FamilyEvents, FdEvent, Protocols},
     };
     use crate::core::{Decimal, Fd, ObjectId};
     use assert_matches::assert_matches;

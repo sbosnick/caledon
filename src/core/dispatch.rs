@@ -107,7 +107,7 @@ pub trait TargetStore<SI> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{store::ObjectMap, ObjectId, ServerRole};
+    use crate::core::{role::ServerRole, store::ObjectMap, ObjectId};
 
     use std::{
         iter,
@@ -149,7 +149,7 @@ mod tests {
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let mut targets = ObjectMap::new(ServerRole {});
+        let mut targets = ObjectMap::<_, ServerRole>::new();
         targets.set_default(tag, target);
 
         let _ = dispatcher(stream, |_| tag, targets).await;
@@ -167,7 +167,7 @@ mod tests {
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let mut targets = ObjectMap::new(ServerRole {});
+        let mut targets = ObjectMap::<_, ServerRole>::new();
         targets.set_default(tag1, target);
 
         let _ = dispatcher(stream, |_| tag2, targets).await;
@@ -185,7 +185,7 @@ mod tests {
         let stream = stream::iter(iter::once(result));
         let inner = Arc::new(Mutex::new(None));
         let target = FakeTarget::new(inner.clone(), DispatchResult::Continue);
-        let mut targets = ObjectMap::new(ServerRole {});
+        let mut targets = ObjectMap::<_, ServerRole>::new();
         targets.set_default(tag2, target);
 
         let _ = dispatcher(stream, |_| tag1, targets).await;
@@ -199,7 +199,7 @@ mod tests {
         let tag = ObjectId(1);
         let stream = stream::empty::<Result<u8, ()>>();
         let target = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Continue);
-        let mut targets = ObjectMap::new(ServerRole {});
+        let mut targets = ObjectMap::<_, ServerRole>::new();
         targets.set_default(tag, target);
 
         let _ = dispatcher(stream, |_| tag, targets).await;
@@ -218,7 +218,7 @@ mod tests {
             Arc::new(Mutex::new(None)),
             DispatchResult::Add(tag1, target1),
         );
-        let mut targets = ObjectMap::new(ServerRole {});
+        let mut targets = ObjectMap::<_, ServerRole>::new();
         targets.set_default(tag2, target2);
 
         let _ = dispatcher(stream, |tag| ObjectId(*tag as u32), targets).await;
@@ -237,7 +237,7 @@ mod tests {
         let inner = Arc::new(Mutex::new(None));
         let target1 = FakeTarget::new(Arc::new(Mutex::new(None)), DispatchResult::Remove(tag1));
         let target2 = FakeTarget::new(inner.clone(), DispatchResult::Add(tag1, target1));
-        let mut targets = ObjectMap::new(ServerRole {});
+        let mut targets = ObjectMap::<_, ServerRole>::new();
         targets.set_default(tag2, target2);
 
         let _ = dispatcher(stream, |tag| ObjectId(*tag as u32), targets).await;

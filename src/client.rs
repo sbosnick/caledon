@@ -38,7 +38,7 @@ pub struct Display {
 
 impl Display {
     /// Create a new `Display`.
-    pub async fn new(channel: impl IoChannel) -> Result<Self, ClientError> {
+    pub async fn new(channel: impl IoChannel + Unpin) -> Result<Self, ClientError> {
         let (send, recv, state) = make_wire_protocol(channel);
 
         Ok(Display {

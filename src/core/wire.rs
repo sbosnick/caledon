@@ -14,21 +14,32 @@ use std::marker::PhantomData;
 
 use futures_core::Stream;
 use futures_sink::Sink;
+use futures_util::stream::StreamExt;
 
 use crate::IoChannel;
 
-use super::{ClientRole, ProtocolFamily, ServerRole};
+use super::{
+    role::{ClientRole, HasFd, Role, SendMsg, ServerRole},
+    store::ObjectMap,
+    transport::WaylandTransport,
+    ProtocolFamily,
+};
 
 /// Create the [Wayland] wire protocol sender, receiver, and state for
 /// the given channel.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub(crate) fn make_wire_protocol<R, PF>(
-    _channel: impl IoChannel,
+    channel: impl IoChannel + Unpin,
 ) -> (WireSend<R, PF>, WireRecv<R, PF>, WireState<R, PF>)
 where
-    PF: ProtocolFamily,
+    PF: ProtocolFamily + HasFd<R> + SendMsg<R>,
+    R: Role,
 {
+    let map = ObjectMap::<PF, R>::new();
+    let transport = WaylandTransport::<_, R, PF, _>::new(channel, map);
+    let (_stream, _sink) = transport.split();
+
     (
         WireSend::<R, PF> {
             _phantom: PhantomData,

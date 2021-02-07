@@ -19,10 +19,12 @@ use snafu::Snafu;
 
 mod codec;
 mod dispatch;
+mod role;
 mod store;
 mod transport;
 mod wire;
 
+pub(crate) use role::ClientRole;
 pub(crate) use wire::{make_wire_protocol, WaylandState, WireError, WireRecv, WireSend, WireState};
 
 /// An argument type for a [Wayland] message.
@@ -331,30 +333,6 @@ where
 {
 }
 
-// Used as a trait bound to allow checking if a particular message
-// passes a file descriptor.
-pub(crate) trait HasFd<R: Role> {
-    fn has_fd(&self, opcode: OpCode) -> bool;
-}
-
-impl<PF> HasFd<ServerRole> for PF
-where
-    PF: ProtocolFamily,
-{
-    fn has_fd(&self, opcode: OpCode) -> bool {
-        self.event_has_fd(opcode)
-    }
-}
-
-impl<PF> HasFd<ClientRole> for PF
-where
-    PF: ProtocolFamily,
-{
-    fn has_fd(&self, opcode: OpCode) -> bool {
-        self.request_has_fd(opcode)
-    }
-}
-
 // === impl Fd ===
 
 impl AsRawFd for &Fd {
@@ -456,16 +434,6 @@ impl fmt::Display for ConversionErrorType {
         write!(f, "{}", term)
     }
 }
-
-/// Internal marker trait to allow specializaton of other types to either servers or
-/// clients.
-pub(crate) trait Role {}
-
-pub(crate) struct ServerRole {}
-impl Role for ServerRole {}
-
-pub(crate) struct ClientRole {}
-impl Role for ClientRole {}
 
 /// Internal module for sealing [`Argument`] and [`Signature`]
 mod private {
