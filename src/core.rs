@@ -288,7 +288,7 @@ pub trait ProtocolFamily {
         &self,
         _opcode: OpCode,
         _msg: MM,
-    ) -> Option<Self::Requests> {
+    ) -> Result<Self::Requests, FromOpcodeError<MM::Error>> {
         // TODO: remove the default implementation when the test ProtocolFamily and the code
         // generation implement this method.
         panic!("make_request_message not properly implemented");
@@ -299,7 +299,7 @@ pub trait ProtocolFamily {
         &self,
         _opcode: OpCode,
         _msg: MM,
-    ) -> Option<Self::Events> {
+    ) -> Result<Self::Events, FromOpcodeError<MM::Error>> {
         // TODO: remove the default implementation when the test ProtocolFamily and the code
         // generation implement this method.
         panic!("make_event_message not properly implemented");

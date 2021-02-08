@@ -28,7 +28,7 @@ use super::{
     role::{ClientRole, HasFd, MakeMessage, RecvMsg, RecvMsgType, Role, SendMsg, ServerRole},
     store::ObjectMap,
     transport::{TransportError, WaylandTransport},
-    ObjectId, OpCode, ProtocolFamily,
+    FromOpcodeError, ObjectId, OpCode, ProtocolFamily,
 };
 
 /// Create the [Wayland] wire protocol sender, receiver, and state for
@@ -81,7 +81,11 @@ pub(crate) enum WireError {
     RecvNoObject { object_id: ObjectId },
 
     #[snafu(display("Received a message with the opcode {} for object ID {} but that object does not have such a method.", opcode, object_id))]
-    RecvNoMethod { object_id: ObjectId, opcode: OpCode },
+    RecvNoMethod {
+        source: FromOpcodeError<TransportError>,
+        object_id: ObjectId,
+        opcode: OpCode,
+    },
 }
 
 /// The concrete implementation of [WaylandState] for the wire protocol.

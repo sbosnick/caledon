@@ -9,7 +9,7 @@
 //! Marker trait and associed blanket traits and type functions to specialization the behaviour
 //! of other types for servers or for clients.
 
-use super::{MessageMaker, OpCode, ProtocolFamily, ProtocolFamilyMessageList};
+use super::{FromOpcodeError, MessageMaker, OpCode, ProtocolFamily, ProtocolFamilyMessageList};
 
 /// Internal marker trait to allow specializaton of other types to either servers or
 /// clients.
@@ -56,7 +56,11 @@ where
 pub(crate) trait MakeMessage<R: Role> {
     type Output: ProtocolFamilyMessageList;
 
-    fn make_message<MM: MessageMaker>(&self, opcode: OpCode, msg: MM) -> Option<Self::Output>;
+    fn make_message<MM: MessageMaker>(
+        &self,
+        opcode: OpCode,
+        msg: MM,
+    ) -> Result<Self::Output, FromOpcodeError<MM::Error>>;
 }
 
 impl<PF> MakeMessage<ServerRole> for PF
@@ -65,7 +69,11 @@ where
 {
     type Output = PF::Requests;
 
-    fn make_message<MM: MessageMaker>(&self, opcode: OpCode, msg: MM) -> Option<Self::Output> {
+    fn make_message<MM: MessageMaker>(
+        &self,
+        opcode: OpCode,
+        msg: MM,
+    ) -> Result<Self::Output, FromOpcodeError<MM::Error>> {
         self.make_request_message(opcode, msg)
     }
 }
@@ -76,7 +84,11 @@ where
 {
     type Output = PF::Events;
 
-    fn make_message<MM: MessageMaker>(&self, opcode: OpCode, msg: MM) -> Option<Self::Output> {
+    fn make_message<MM: MessageMaker>(
+        &self,
+        opcode: OpCode,
+        msg: MM,
+    ) -> Result<Self::Output, FromOpcodeError<MM::Error>> {
         self.make_event_message(opcode, msg)
     }
 }
