@@ -282,6 +282,28 @@ pub trait ProtocolFamily {
     /// Check if an event message with the given `OpCode` for this element
     /// has an `Fd`.
     fn event_has_fd(&self, opcode: OpCode) -> bool;
+
+    /// Create the request message with the given `OpCode` for this element.
+    fn make_request_message<MM: MessageMaker>(
+        &self,
+        _opcode: OpCode,
+        _msg: MM,
+    ) -> Option<Self::Requests> {
+        // TODO: remove the default implementation when the test ProtocolFamily and the code
+        // generation implement this method.
+        panic!("make_request_message not properly implemented");
+    }
+
+    /// Create the event message with the given `OpCode` for this element.
+    fn make_event_message<MM: MessageMaker>(
+        &self,
+        _opcode: OpCode,
+        _msg: MM,
+    ) -> Option<Self::Events> {
+        // TODO: remove the default implementation when the test ProtocolFamily and the code
+        // generation implement this method.
+        panic!("make_event_message not properly implemented");
+    }
 }
 
 // === type alaises and utility traits ===
@@ -342,6 +364,13 @@ impl AsRawFd for &Fd {
 }
 
 // === impl ObjectId ===
+
+impl ObjectId {
+    /// Check if this `ObjectId` is the null ID that represents a non-existant object.
+    pub fn is_null(&self) -> bool {
+        self.0 == 0
+    }
+}
 
 impl fmt::Display for ObjectId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

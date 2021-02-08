@@ -10,43 +10,48 @@
 //!
 //! [Wayland]: https://wayland.freedesktop.org/
 
-use std::marker::PhantomData;
+use std::{
+    marker::PhantomData,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use futures_core::Stream;
 use futures_sink::Sink;
-use futures_util::stream::StreamExt;
+use futures_util::stream::{SplitStream, StreamExt};
+use pin_project::pin_project;
+use snafu::{OptionExt, ResultExt, Snafu};
 
 use crate::IoChannel;
 
 use super::{
-    role::{ClientRole, HasFd, Role, SendMsg, ServerRole},
+    role::{ClientRole, HasFd, MakeMessage, RecvMsg, RecvMsgType, Role, SendMsg, ServerRole},
     store::ObjectMap,
-    transport::WaylandTransport,
-    ProtocolFamily,
+    transport::{TransportError, WaylandTransport},
+    ObjectId, OpCode, ProtocolFamily,
 };
 
 /// Create the [Wayland] wire protocol sender, receiver, and state for
 /// the given channel.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub(crate) fn make_wire_protocol<R, PF>(
-    channel: impl IoChannel + Unpin,
-) -> (WireSend<R, PF>, WireRecv<R, PF>, WireState<R, PF>)
+pub(crate) fn make_wire_protocol<T, R, PF>(
+    channel: T,
+) -> (WireSend<R, PF>, WireRecv<T, R, PF>, WireState<R, PF>)
 where
     PF: ProtocolFamily + HasFd<R> + SendMsg<R>,
     R: Role,
+    T: IoChannel + Unpin,
 {
     let map = ObjectMap::<PF, R>::new();
-    let transport = WaylandTransport::<_, R, PF, _>::new(channel, map);
-    let (_stream, _sink) = transport.split();
+    let transport = WaylandTransport::<_, R, PF, _>::new(channel, map.clone());
+    let (_sink, stream) = transport.split();
 
     (
         WireSend::<R, PF> {
             _phantom: PhantomData,
         },
-        WireRecv::<R, PF> {
-            _phantom: PhantomData,
-        },
+        WireRecv::<T, R, PF> { inner: stream, map },
         WireState::<R, PF> {
             _phantom: PhantomData,
         },
@@ -64,7 +69,20 @@ pub(crate) trait WaylandState<PF> {}
 /// Errors in the operation of the [Wayland] wire protocol.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub(crate) enum WireError {}
+#[derive(Debug, Snafu)]
+pub(crate) enum WireError {
+    #[snafu(display("Transport error when attempting to receive a message."))]
+    RecvIoError { source: TransportError },
+
+    #[snafu(display(
+        "Received a message for object ID {} but that object does not exist.",
+        object_id
+    ))]
+    RecvNoObject { object_id: ObjectId },
+
+    #[snafu(display("Received a message with the opcode {} for object ID {} but that object does not have such a method.", opcode, object_id))]
+    RecvNoMethod { object_id: ObjectId, opcode: OpCode },
+}
 
 /// The concrete implementation of [WaylandState] for the wire protocol.
 pub(crate) struct WireState<R, PF> {
@@ -149,28 +167,43 @@ impl<PF: ProtocolFamily> Sink<PF::Events> for WireSend<ServerRole, PF> {
 /// `PF::Events` for the `ClientRole` and `PF::Requests` for the `ServerRole`.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub(crate) struct WireRecv<R, PF> {
-    _phantom: PhantomData<(R, PF)>,
+#[pin_project]
+pub(crate) struct WireRecv<T, R, PF> {
+    #[pin]
+    inner: SplitStream<WaylandTransport<T, R, PF, ObjectMap<PF, R>>>,
+    map: ObjectMap<PF, R>,
 }
 
-impl<PF: ProtocolFamily> Stream for WireRecv<ClientRole, PF> {
-    type Item = Result<<PF as ProtocolFamily>::Events, WireError>;
+impl<T, R, PF> Stream for WireRecv<T, R, PF>
+where
+    PF: ProtocolFamily
+        + RecvMsg<R>
+        + HasFd<R>
+        + MakeMessage<R, Output = <PF as RecvMsg<R>>::Output>,
+    R: Role,
+    T: IoChannel + Unpin,
+{
+    type Item = Result<RecvMsgType<R, PF>, WireError>;
 
-    fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        todo!()
-    }
-}
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let project = self.project();
+        let mut inner = project.inner;
+        let map = project.map;
 
-impl<PF: ProtocolFamily> Stream for WireRecv<ServerRole, PF> {
-    type Item = Result<<PF as ProtocolFamily>::Requests, WireError>;
+        inner.as_mut().poll_next(cx).map(|opt| {
+            opt.map(|res| {
+                res.context(RecvIoError {}).and_then(|msg| {
+                    let object_id = msg.object_id();
+                    let opcode = msg.opcode();
 
-    fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        todo!()
+                    map.get(object_id)
+                        .context(RecvNoObject { object_id })
+                        .and_then(|obj| {
+                            obj.make_message(opcode, msg)
+                                .context(RecvNoMethod { opcode, object_id })
+                        })
+                })
+            })
+        })
     }
 }

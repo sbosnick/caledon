@@ -73,6 +73,21 @@ where
         let tag = get_tag(default_id);
         state.set_default(tag, Arc::new(default));
     }
+
+    pub fn get(&self, object_id: ObjectId) -> Option<Arc<SI>> {
+        if object_id.is_null() {
+            None
+        } else {
+            let state = self.shared.state.lock().unwrap();
+            let tag = get_tag(object_id);
+
+            if !state.is_valid_idx(tag) {
+                None
+            } else {
+                state[tag].clone()
+            }
+        }
+    }
 }
 
 fn get_tag(ObjectId(tag): ObjectId) -> NonZeroUsize {

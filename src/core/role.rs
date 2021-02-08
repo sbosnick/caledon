@@ -9,7 +9,7 @@
 //! Marker trait and associed blanket traits and type functions to specialization the behaviour
 //! of other types for servers or for clients.
 
-use super::{OpCode, ProtocolFamily, ProtocolFamilyMessageList};
+use super::{MessageMaker, OpCode, ProtocolFamily, ProtocolFamilyMessageList};
 
 /// Internal marker trait to allow specializaton of other types to either servers or
 /// clients.
@@ -24,7 +24,7 @@ impl Role for ClientRole {}
 /// Blanket trait for checking if a given [ProtocolFamily] passes a file descriptor on a particular
 /// message.
 ///
-/// This is specializaton for [ServerRole] and [ClientRole] and those should be the only
+/// This is specialized for [ServerRole] and [ClientRole] and those should be the only
 /// implementations of this trait. This trait is otherwise intened to be used as a trait bound.
 pub(crate) trait HasFd<R: Role> {
     fn has_fd(&self, opcode: OpCode) -> bool;
@@ -48,6 +48,39 @@ where
     }
 }
 
+/// Blanket trait for making a message for the given [ProtocolFamily] element given the opcode for
+/// that message.
+///
+/// This is specialized for [ServerRole] and [ClientRole] and those should be the only
+/// implementations of this trait. This trait is otherwise intended to be used as a trait bound.
+pub(crate) trait MakeMessage<R: Role> {
+    type Output: ProtocolFamilyMessageList;
+
+    fn make_message<MM: MessageMaker>(&self, opcode: OpCode, msg: MM) -> Option<Self::Output>;
+}
+
+impl<PF> MakeMessage<ServerRole> for PF
+where
+    PF: ProtocolFamily,
+{
+    type Output = PF::Requests;
+
+    fn make_message<MM: MessageMaker>(&self, opcode: OpCode, msg: MM) -> Option<Self::Output> {
+        self.make_request_message(opcode, msg)
+    }
+}
+
+impl<PF> MakeMessage<ClientRole> for PF
+where
+    PF: ProtocolFamily,
+{
+    type Output = PF::Events;
+
+    fn make_message<MM: MessageMaker>(&self, opcode: OpCode, msg: MM) -> Option<Self::Output> {
+        self.make_event_message(opcode, msg)
+    }
+}
+
 /// A type function to select the type of messages to send for a [ProtocolFamily] depending on the
 /// [Role].
 pub trait SendMsg<R: Role> {
@@ -65,3 +98,19 @@ impl<PF: ProtocolFamily> SendMsg<ClientRole> for PF {
 /// Type alias to make using the [SendMsg] type function easier.
 pub(crate) type SendMsgType<R, P> = <P as SendMsg<R>>::Output;
 
+/// A type function to select the type of messages to receive for a [ProtocolFamily] depending on
+/// the [Role].
+pub trait RecvMsg<R: Role> {
+    type Output: ProtocolFamilyMessageList;
+}
+
+impl<PF: ProtocolFamily> RecvMsg<ServerRole> for PF {
+    type Output = PF::Requests;
+}
+
+impl<PF: ProtocolFamily> RecvMsg<ClientRole> for PF {
+    type Output = PF::Events;
+}
+
+/// Type alias to make using the [RecvMsg] type function easier.
+pub(crate) type RecvMsgType<R, P> = <P as RecvMsg<R>>::Output;
