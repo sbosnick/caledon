@@ -53,7 +53,7 @@ where
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
-        use crate::core::{Interface, MessageHandler, MessageList, OpCode, ProtocolFamily, ProtocolFamilyMessageList};
+        use crate::core::{Interface, FromOpcodeError, MessageHandler, MessageList, MessageMaker, OpCode, ProtocolFamily, ProtocolFamilyMessageList};
 
         #protocol_family
 
@@ -77,7 +77,15 @@ where
 {
     let entries = protocols.clone().map(generate_protocol_list_entry);
     let request_has_fd_entries = generate_has_fd_entries(protocols.clone(), requests_ident.clone());
-    let event_has_fd_entries = generate_has_fd_entries(protocols, events_ident.clone());
+    let event_has_fd_entries = generate_has_fd_entries(protocols.clone(), events_ident.clone());
+    let make_request_message_entries =
+        generate_make_message_entries(protocols.clone(), requests_ident.clone(), |p| {
+            p.protocol_requests_ident()
+        });
+    let make_event_message_entries =
+        generate_make_message_entries(protocols, events_ident.clone(), |p| {
+            p.protocol_events_ident()
+        });
 
     quote! {
             #[doc = "The list of protocols implemented by caledon."]
@@ -99,6 +107,24 @@ where
                 fn event_has_fd(&self, opcode: OpCode) -> bool {
                     match self {
                         #(#event_has_fd_entries)*
+                    }
+                }
+
+                fn make_request_message<MM>(&self, opcode: OpCode, msg: MM) -> Result<Self::Requests, FromOpcodeError<MM::Error>>
+                where
+                    MM: MessageMaker,
+                {
+                    match self {
+                        #(#make_request_message_entries)*
+                    }
+                }
+
+                fn make_event_message<MM>(&self, opcode: OpCode, msg: MM) -> Result<Self::Events, FromOpcodeError<MM::Error>>
+                where
+                    MM: MessageMaker,
+                {
+                    match self {
+                        #(#make_event_message_entries)*
                     }
                 }
             }
@@ -268,6 +294,44 @@ where
 
         quote! {
             Protocols::#penum_entry(self::#pmod::#pmlist_entry::#ienum_entry(_)) => <self::#pmod::#iface as Interface>::#ident::has_fd(opcode),
+        }
+    })
+}
+
+fn generate_make_message_entries<'a, I, F>(
+    iter: I,
+    ident: Ident,
+    f: F,
+) -> impl Iterator<Item = TokenStream> + 'a
+where
+    I: Iterator<Item = &'a Protocol> + 'a,
+    F: Fn(&Protocol) -> Ident + 'a,
+{
+    iter.flat_map(move |p| {
+        let penum_entry = p.enum_entry_ident();
+        let pmod = p.mod_ident();
+        let pmessage = f(p);
+        let pmlist_entry = p.protocol_ident();
+        p.interfaces().map(move |i| {
+            (
+                penum_entry.clone(),
+                pmod.clone(),
+                pmlist_entry.clone(),
+                pmessage.clone(),
+                i,
+            )
+        })
+    })
+    .map(move |(penum_entry, pmod, pmlist_entry, pmessage, i)| {
+        let ienum_entry = i.enum_entry_ident();
+        let iface = i.interface_ident();
+
+        quote! {
+            Protocols::#penum_entry(self::#pmod::#pmlist_entry::#ienum_entry(_)) => {
+                <self::#pmod::#iface as Interface>::#ident::from_opcode(opcode, msg).map(|m| {
+                    #ident::#penum_entry(#pmod::#pmessage::#ienum_entry(m))
+                })
+            }
         }
     })
 }

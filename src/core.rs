@@ -288,22 +288,14 @@ pub trait ProtocolFamily {
         &self,
         _opcode: OpCode,
         _msg: MM,
-    ) -> Result<Self::Requests, FromOpcodeError<MM::Error>> {
-        // TODO: remove the default implementation when the test ProtocolFamily and the code
-        // generation implement this method.
-        panic!("make_request_message not properly implemented");
-    }
+    ) -> Result<Self::Requests, FromOpcodeError<MM::Error>>;
 
     /// Create the event message with the given `OpCode` for this element.
     fn make_event_message<MM: MessageMaker>(
         &self,
         _opcode: OpCode,
         _msg: MM,
-    ) -> Result<Self::Events, FromOpcodeError<MM::Error>> {
-        // TODO: remove the default implementation when the test ProtocolFamily and the code
-        // generation implement this method.
-        panic!("make_event_message not properly implemented");
-    }
+    ) -> Result<Self::Events, FromOpcodeError<MM::Error>>;
 }
 
 // === type alaises and utility traits ===

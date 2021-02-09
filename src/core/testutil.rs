@@ -293,6 +293,34 @@ impl ProtocolFamily for Protocols {
             }
         }
     }
+
+    fn make_request_message<MM: super::MessageMaker>(
+        &self,
+        opcode: super::OpCode,
+        msg: MM,
+    ) -> Result<Self::Requests, FromOpcodeError<MM::Error>> {
+        match self {
+            Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(_)) => {
+                <FdPasser as Interface>::Requests::from_opcode(opcode, msg).map(|m| {
+                    FamilyRequests::BuildTimeWaylandTests(BuildTimeWaylandTestsRequest::FdPasser(m))
+                })
+            }
+        }
+    }
+
+    fn make_event_message<MM: super::MessageMaker>(
+        &self,
+        opcode: super::OpCode,
+        msg: MM,
+    ) -> Result<Self::Events, FromOpcodeError<MM::Error>> {
+        match self {
+            Protocols::BuildTimeWaylandTests(BuildTimeWaylandTests::FdPasser(_)) => {
+                <FdPasser as Interface>::Events::from_opcode(opcode, msg).map(|m| {
+                    FamilyEvents::BuildTimeWaylandTests(BuildTimeWaylandTestsEvents::FdPasser(m))
+                })
+            }
+        }
+    }
 }
 impl From<BuildTimeWaylandTests> for Protocols {
     fn from(b: BuildTimeWaylandTests) -> Self {
