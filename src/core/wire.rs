@@ -11,6 +11,7 @@
 //! [Wayland]: https://wayland.freedesktop.org/
 
 use std::{
+    fmt::Display,
     marker::PhantomData,
     pin::Pin,
     task::{Context, Poll},
@@ -18,14 +19,14 @@ use std::{
 
 use futures_core::Stream;
 use futures_sink::Sink;
-use futures_util::stream::{SplitStream, StreamExt};
+use futures_util::stream::{SplitSink, SplitStream, StreamExt};
 use pin_project::pin_project;
 use snafu::{OptionExt, ResultExt, Snafu};
 
 use crate::IoChannel;
 
 use super::{
-    role::{ClientRole, HasFd, MakeMessage, RecvMsg, RecvMsgType, Role, SendMsg, ServerRole},
+    role::{HasFd, MakeMessage, RecvMsg, RecvMsgType, Role, SendMsg, SendMsgType},
     store::ObjectMap,
     transport::{TransportError, WaylandTransport},
     FromOpcodeError, ObjectId, OpCode, ProtocolFamily,
@@ -37,7 +38,7 @@ use super::{
 /// [Wayland]: https://wayland.freedesktop.org/
 pub(crate) fn make_wire_protocol<T, R, PF>(
     channel: T,
-) -> (WireSend<R, PF>, WireRecv<T, R, PF>, WireState<R, PF>)
+) -> (WireSend<T, R, PF>, WireRecv<T, R, PF>, WireState<R, PF>)
 where
     PF: ProtocolFamily + HasFd<R> + SendMsg<R>,
     R: Role,
@@ -45,12 +46,10 @@ where
 {
     let map = ObjectMap::<PF, R>::new();
     let transport = WaylandTransport::<_, R, PF, _>::new(channel, map.clone());
-    let (_sink, stream) = transport.split();
+    let (sink, stream) = transport.split();
 
     (
-        WireSend::<R, PF> {
-            _phantom: PhantomData,
-        },
+        WireSend::<T, R, PF> { inner: sink },
         WireRecv::<T, R, PF> { inner: stream, map },
         WireState::<R, PF> {
             _phantom: PhantomData,
@@ -86,6 +85,33 @@ pub(crate) enum WireError {
         object_id: ObjectId,
         opcode: OpCode,
     },
+
+    #[snafu(display("Transport error when attempting to send a message: {}.", phase))]
+    SendIoError {
+        source: TransportError,
+        phase: SendIoErrorPhase,
+    },
+}
+
+#[derive(Debug)]
+pub(crate) enum SendIoErrorPhase {
+    Ready,
+    StartSend,
+    Flush,
+    Close,
+}
+
+impl Display for SendIoErrorPhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            SendIoErrorPhase::Ready => "getting ready to send",
+            SendIoErrorPhase::StartSend => "starting to send",
+            SendIoErrorPhase::Flush => "flushing",
+            SendIoErrorPhase::Close => "closing",
+        };
+
+        write!(f, "{}", message)
+    }
 }
 
 /// The concrete implementation of [WaylandState] for the wire protocol.
@@ -102,65 +128,52 @@ impl<R, PF> WaylandState<PF> for WireState<R, PF> {}
 /// `PF::Requests` for the `ClientRole` and `PF::Events` for the `ServerRole`.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub(crate) struct WireSend<R, PF> {
-    _phantom: PhantomData<(R, PF)>,
+#[pin_project]
+pub(crate) struct WireSend<T, R, PF>
+where
+    PF: SendMsg<R>,
+    R: Role,
+{
+    #[pin]
+    inner: SplitSink<WaylandTransport<T, R, PF, ObjectMap<PF, R>>, SendMsgType<R, PF>>,
 }
 
-impl<PF: ProtocolFamily> Sink<PF::Requests> for WireSend<ClientRole, PF> {
+impl<T, R, PF> Sink<SendMsgType<R, PF>> for WireSend<T, R, PF>
+where
+    PF: ProtocolFamily + SendMsg<R>,
+    R: Role,
+    T: IoChannel + Unpin,
+{
     type Error = WireError;
 
-    fn poll_ready(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        todo!()
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().inner.poll_ready(cx).map(|r| {
+            r.context(SendIoError {
+                phase: SendIoErrorPhase::Ready,
+            })
+        })
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, _item: PF::Requests) -> Result<(), Self::Error> {
-        todo!()
+    fn start_send(self: Pin<&mut Self>, item: SendMsgType<R, PF>) -> Result<(), Self::Error> {
+        self.project().inner.start_send(item).context(SendIoError {
+            phase: SendIoErrorPhase::StartSend,
+        })
     }
 
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        todo!()
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().inner.poll_flush(cx).map(|r| {
+            r.context(SendIoError {
+                phase: SendIoErrorPhase::Flush,
+            })
+        })
     }
 
-    fn poll_close(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        todo!()
-    }
-}
-
-impl<PF: ProtocolFamily> Sink<PF::Events> for WireSend<ServerRole, PF> {
-    type Error = WireError;
-
-    fn poll_ready(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        todo!()
-    }
-
-    fn start_send(self: std::pin::Pin<&mut Self>, _item: PF::Events) -> Result<(), Self::Error> {
-        todo!()
-    }
-
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        todo!()
-    }
-
-    fn poll_close(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        todo!()
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().inner.poll_close(cx).map(|r| {
+            r.context(SendIoError {
+                phase: SendIoErrorPhase::Close,
+            })
+        })
     }
 }
 
