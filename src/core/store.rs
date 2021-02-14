@@ -23,27 +23,30 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use bitvec::prelude::*;
+use snafu::{ensure, OptionExt, Snafu};
+
 use super::{
     dispatch::TargetStore,
-    role::{HasFd, Role},
+    role::{HasFd, Role, ServerRole},
     transport::MessageFdMap,
-    ObjectId,
+    ClientRole, ObjectId,
 };
 
 /// A concurancy safe map from an [`ObjectId`] to a live protocol object.
 #[derive(Debug)]
 pub(crate) struct ObjectMap<SI, R> {
-    shared: Arc<Shared<SI>>,
-    _phantom: PhantomData<R>,
+    shared: Arc<Shared<SI, R>>,
 }
 
 #[derive(Debug)]
-struct Shared<SI> {
-    state: Mutex<State<SI>>,
+struct Shared<SI, R> {
+    source: Mutex<IdSource<R>>,
+    map: Mutex<Map<SI>>,
 }
 
 #[derive(Debug)]
-struct State<SI> {
+struct Map<SI> {
     // client created objects
     client: Vec<Option<Arc<SI>>>,
 
@@ -53,23 +56,34 @@ struct State<SI> {
     default_tag: Option<NonZeroUsize>,
 }
 
+#[derive(Debug)]
+struct IdSource<R, E = Extractor> {
+    pool: BitVec,
+    _phantom: PhantomData<(R, E)>,
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Exhasted the pool of available object id's"))]
+pub(crate) struct ObjectIdExhastedError;
+
 impl<SI, R> ObjectMap<SI, R>
 where
     R: Role,
+    Extractor: ExtractIndex<R>,
 {
     pub fn new() -> Self {
         Self {
             shared: Arc::new(Shared {
-                state: Mutex::new(State::default()),
+                source: Mutex::new(IdSource::default()),
+                map: Mutex::new(Map::default()),
             }),
-            _phantom: PhantomData,
         }
     }
 
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
     pub fn set_default(&mut self, default_id: ObjectId, default: SI) {
-        let mut state = self.shared.state.lock().unwrap();
+        let mut state = self.shared.map.lock().unwrap();
         let tag = get_tag(default_id);
         state.set_default(tag, Arc::new(default));
     }
@@ -78,7 +92,7 @@ where
         if object_id.is_null() {
             None
         } else {
-            let state = self.shared.state.lock().unwrap();
+            let state = self.shared.map.lock().unwrap();
             let tag = get_tag(object_id);
 
             if !state.is_valid_idx(tag) {
@@ -86,6 +100,48 @@ where
             } else {
                 state[tag].clone()
             }
+        }
+    }
+
+    pub fn create(&self, f: impl Fn(ObjectId) -> SI) -> Result<Arc<SI>, ObjectIdExhastedError> {
+        let new_id = {
+            let mut source = self.shared.source.lock().unwrap();
+            source.allocate_id()?
+        };
+
+        let new_obj = Arc::new(f(new_id));
+
+        {
+            let mut map = self.shared.map.lock().unwrap();
+            let tag = get_tag(new_id);
+            map.ensure_idx(tag);
+            map[tag] = Some(new_obj.clone());
+        }
+        Ok(new_obj)
+    }
+
+    pub fn add(&self, id: ObjectId, object: SI) {
+        assert!(
+            !Extractor::is_local_object_id(id),
+            "Attempt to add a local object id to to the ObjectMap."
+        );
+
+        let mut map = self.shared.map.lock().unwrap();
+        let tag = get_tag(id);
+        map.ensure_idx(tag);
+        map[tag] = Some(Arc::new(object));
+    }
+
+    pub fn remove(&self, id: ObjectId) {
+        {
+            let mut map = self.shared.map.lock().unwrap();
+            let tag = get_tag(id);
+            map[tag] = None;
+        }
+
+        if Extractor::is_local_object_id(id) {
+            let mut source = self.shared.source.lock().unwrap();
+            source.release_id(id);
         }
     }
 }
@@ -98,7 +154,7 @@ impl<SI, R> TargetStore<SI> for ObjectMap<SI, R> {
     type Tag = ObjectId;
 
     fn get(&self, object_id: ObjectId) -> Arc<SI> {
-        let state = self.shared.state.lock().unwrap();
+        let state = self.shared.map.lock().unwrap();
         let tag = state.check_idx_or_default(get_tag(object_id));
 
         state[tag]
@@ -112,7 +168,7 @@ impl<SI, R> TargetStore<SI> for ObjectMap<SI, R> {
     }
 
     fn add(&mut self, object_id: ObjectId, target: SI) {
-        let mut state = self.shared.state.lock().unwrap();
+        let mut state = self.shared.map.lock().unwrap();
         let tag = get_tag(object_id);
 
         assert_ne!(
@@ -126,7 +182,7 @@ impl<SI, R> TargetStore<SI> for ObjectMap<SI, R> {
     }
 
     fn remove(&mut self, object_id: ObjectId) {
-        let mut state = self.shared.state.lock().unwrap();
+        let mut state = self.shared.map.lock().unwrap();
         let tag = get_tag(object_id);
 
         assert_ne!(
@@ -147,7 +203,7 @@ where
     SI: HasFd<R>,
 {
     fn message_has_fd(&self, ObjectId(tag): ObjectId, opcode: u16) -> bool {
-        let state = self.shared.state.lock().unwrap();
+        let state = self.shared.map.lock().unwrap();
         let tag = match NonZeroUsize::new(tag.try_into().unwrap()) {
             Some(tag) => tag,
             None => return false,
@@ -167,15 +223,15 @@ impl<SI, R> Clone for ObjectMap<SI, R> {
     fn clone(&self) -> Self {
         Self {
             shared: self.shared.clone(),
-            _phantom: PhantomData,
         }
     }
 }
 
 const CLIENT_ID_BASE: usize = 0x00000001;
 const SERVER_ID_BASE: usize = 0xff000000;
+const SERVER_ID_MAX: usize = 0xffffffff;
 
-impl<SI> State<SI> {
+impl<SI> Map<SI> {
     fn default_idx(&self) -> NonZeroUsize {
         self.default_tag
             .expect("Attempt to use an ObjectMap before setting the default object.")
@@ -228,7 +284,7 @@ impl<SI> State<SI> {
     }
 }
 
-impl<SI> Index<NonZeroUsize> for State<SI> {
+impl<SI> Index<NonZeroUsize> for Map<SI> {
     type Output = Option<Arc<SI>>;
 
     fn index(&self, index: NonZeroUsize) -> &Self::Output {
@@ -238,7 +294,7 @@ impl<SI> Index<NonZeroUsize> for State<SI> {
     }
 }
 
-impl<SI> IndexMut<NonZeroUsize> for State<SI> {
+impl<SI> IndexMut<NonZeroUsize> for Map<SI> {
     fn index_mut(&mut self, index: NonZeroUsize) -> &mut Self::Output {
         let (vector, idx) = self.get_vec_idx_mut(index);
 
@@ -246,7 +302,7 @@ impl<SI> IndexMut<NonZeroUsize> for State<SI> {
     }
 }
 
-impl<SI> Default for State<SI> {
+impl<SI> Default for Map<SI> {
     fn default() -> Self {
         Self {
             client: Vec::new(),
@@ -256,9 +312,92 @@ impl<SI> Default for State<SI> {
     }
 }
 
+impl<R: Role, E: ExtractIndex<R>> IdSource<R, E> {
+    fn allocate_id(&mut self) -> Result<ObjectId, ObjectIdExhastedError> {
+        if self.pool.all() {
+            self.pool.push(true);
+            E::to_object_id(self.pool.len() - 1)
+        } else {
+            let idx = self
+                .pool
+                .iter()
+                .enumerate()
+                .find_map(|(idx, val)| if !val { Some(idx) } else { None })
+                .context(ObjectIdExhastedContext {})?;
+
+            self.pool.set(idx, true);
+            E::to_object_id(idx)
+        }
+    }
+
+    fn release_id(&mut self, id: ObjectId) {
+        self.pool.set(E::from_object_id(id), false)
+    }
+}
+
+impl<R: Role> Default for IdSource<R, Extractor> {
+    fn default() -> Self {
+        Self {
+            pool: BitVec::new(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+pub(crate) trait ExtractIndex<R: Role> {
+    fn is_local_object_id(id: ObjectId) -> bool;
+    fn from_object_id(id: ObjectId) -> usize;
+    fn to_object_id(index: usize) -> Result<ObjectId, ObjectIdExhastedError>;
+}
+
+#[derive(Debug)]
+pub(crate) struct Extractor;
+
+impl ExtractIndex<ServerRole> for Extractor {
+    fn from_object_id(ObjectId(id): ObjectId) -> usize {
+        assert!(id as usize >= SERVER_ID_BASE);
+        id as usize - SERVER_ID_BASE
+    }
+
+    fn to_object_id(index: usize) -> Result<ObjectId, ObjectIdExhastedError> {
+        ensure!(
+            index < SERVER_ID_MAX - SERVER_ID_BASE,
+            ObjectIdExhastedContext {}
+        );
+        Ok(ObjectId((index + SERVER_ID_BASE) as u32))
+    }
+
+    fn is_local_object_id(ObjectId(id): ObjectId) -> bool {
+        let id: usize = id.try_into().unwrap();
+        SERVER_ID_BASE <= id && id <= SERVER_ID_MAX
+    }
+}
+
+impl ExtractIndex<ClientRole> for Extractor {
+    fn from_object_id(ObjectId(id): ObjectId) -> usize {
+        assert!(id != 0 && (id as usize) < SERVER_ID_BASE);
+        id as usize - CLIENT_ID_BASE
+    }
+
+    fn to_object_id(index: usize) -> Result<ObjectId, ObjectIdExhastedError> {
+        ensure!(
+            index < ((SERVER_ID_BASE - 1) - CLIENT_ID_BASE),
+            ObjectIdExhastedContext {}
+        );
+        Ok(ObjectId((index + CLIENT_ID_BASE) as u32))
+    }
+
+    fn is_local_object_id(ObjectId(id): ObjectId) -> bool {
+        let id: usize = id.try_into().unwrap();
+        CLIENT_ID_BASE <= id && id < SERVER_ID_BASE
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use bitvec::bitvec;
 
     use crate::core::{
         role::{ClientRole, ServerRole},
@@ -296,10 +435,10 @@ mod tests {
     }
 
     #[test]
-    fn state_ensure_idx_increses_right_vec() {
+    fn map_ensure_idx_increses_right_vec() {
         let index = NonZeroUsize::new(SERVER_ID_BASE + 3).unwrap();
 
-        let mut sut = State::<u8>::default();
+        let mut sut = Map::<u8>::default();
         sut.ensure_idx(index);
 
         assert_eq!(sut.client.len(), 0);
@@ -307,11 +446,11 @@ mod tests {
     }
 
     #[test]
-    fn state_check_idx_or_default_gets_default_if_vector_too_small() {
+    fn map_check_idx_or_default_gets_default_if_vector_too_small() {
         let index = NonZeroUsize::new(SERVER_ID_BASE + 3).unwrap();
         let default_idx = NonZeroUsize::new(CLIENT_ID_BASE + 1).unwrap();
 
-        let mut sut = State::<u8>::default();
+        let mut sut = Map::<u8>::default();
         sut.set_default(default_idx, Arc::new(5));
         let result = sut.check_idx_or_default(index);
 
@@ -319,13 +458,77 @@ mod tests {
     }
 
     #[test]
-    fn state_index_writes_to_right_vec() {
+    fn map_index_writes_to_right_vec() {
         let index = NonZeroUsize::new(SERVER_ID_BASE + 3).unwrap();
 
-        let mut sut = State::<u8>::default();
+        let mut sut = Map::<u8>::default();
         sut.ensure_idx(index);
         sut[index] = Some(Arc::new(5));
 
         assert!(sut.server[3].is_some());
+    }
+
+    #[test]
+    fn client_id_source_allocates_id_1() {
+        let mut sut = IdSource::<ClientRole>::default();
+        let result = sut.allocate_id().unwrap();
+
+        assert_eq!(result, ObjectId(1));
+    }
+
+    #[test]
+    fn server_id_source_allocate_from_server_range() {
+        let mut sut = IdSource::<ServerRole>::default();
+        let result = sut.allocate_id().unwrap();
+
+        assert_eq!(result, ObjectId(SERVER_ID_BASE as u32));
+    }
+
+    #[test]
+    fn id_source_reuses_released_id() {
+        let mut sut = IdSource::<ServerRole>::default();
+        let id1 = sut.allocate_id().unwrap();
+        sut.release_id(id1);
+        let id2 = sut.allocate_id().unwrap();
+
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn id_source_allocates_densely() {
+        let mut sut = IdSource::<ServerRole>::default();
+        let _ = sut.allocate_id();
+        let id = sut.allocate_id().unwrap();
+        sut.release_id(id);
+        let _ = sut.allocate_id();
+        let _ = sut.allocate_id();
+
+        assert_eq!(sut.pool.len(), 3);
+    }
+
+    #[test]
+    fn full_server_id_source_allocate_is_error() {
+        let pool = bitvec![1; SERVER_ID_MAX - SERVER_ID_BASE];
+
+        let mut sut = IdSource::<ServerRole> {
+            pool,
+            _phantom: PhantomData,
+        };
+        let result = sut.allocate_id();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn full_client_id_source_allocate_is_error() {
+        let pool = bitvec![1; (SERVER_ID_BASE - 1) - CLIENT_ID_BASE];
+
+        let mut sut = IdSource::<ClientRole> {
+            pool,
+            _phantom: PhantomData,
+        };
+        let result = sut.allocate_id();
+
+        assert!(result.is_err());
     }
 }

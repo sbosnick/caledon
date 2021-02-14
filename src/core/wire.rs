@@ -12,8 +12,8 @@
 
 use std::{
     fmt::Display,
-    marker::PhantomData,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -27,7 +27,7 @@ use crate::IoChannel;
 
 use super::{
     role::{HasFd, MakeMessage, RecvMsg, RecvMsgType, Role, SendMsg, SendMsgType},
-    store::ObjectMap,
+    store::{ExtractIndex, Extractor, ObjectIdExhastedError, ObjectMap},
     transport::{TransportError, WaylandTransport},
     FromOpcodeError, ObjectId, OpCode, ProtocolFamily,
 };
@@ -43,6 +43,7 @@ where
     PF: ProtocolFamily + HasFd<R> + SendMsg<R>,
     R: Role,
     T: IoChannel + Unpin,
+    Extractor: ExtractIndex<R>,
 {
     let map = ObjectMap::<PF, R>::new();
     let transport = WaylandTransport::<_, R, PF, _>::new(channel, map.clone());
@@ -50,10 +51,11 @@ where
 
     (
         WireSend::<T, R, PF> { inner: sink },
-        WireRecv::<T, R, PF> { inner: stream, map },
-        WireState::<R, PF> {
-            _phantom: PhantomData,
+        WireRecv::<T, R, PF> {
+            inner: stream,
+            map: map.clone(),
         },
+        WireState::<R, PF> { map },
     )
 }
 
@@ -63,7 +65,11 @@ where
 /// this interface.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub(crate) trait WaylandState<PF> {}
+pub(crate) trait WaylandState<PF> {
+    fn create_object(&self, f: impl Fn(ObjectId) -> PF) -> Result<Arc<PF>, WireError>;
+    fn add_remote_object(&self, id: ObjectId, object: PF);
+    fn remove_object(&self, id: ObjectId);
+}
 
 /// Errors in the operation of the [Wayland] wire protocol.
 ///
@@ -91,6 +97,9 @@ pub(crate) enum WireError {
         source: TransportError,
         phase: SendIoErrorPhase,
     },
+
+    #[snafu(display("Can't create a new object becasue there are already too many objects."))]
+    CreateObjectError { source: ObjectIdExhastedError },
 }
 
 #[derive(Debug)]
@@ -116,10 +125,26 @@ impl Display for SendIoErrorPhase {
 
 /// The concrete implementation of [WaylandState] for the wire protocol.
 pub(crate) struct WireState<R, PF> {
-    _phantom: PhantomData<(R, PF)>,
+    map: ObjectMap<PF, R>,
 }
 
-impl<R, PF> WaylandState<PF> for WireState<R, PF> {}
+impl<R, PF> WaylandState<PF> for WireState<R, PF>
+where
+    Extractor: ExtractIndex<R>,
+    R: Role,
+{
+    fn create_object(&self, f: impl Fn(ObjectId) -> PF) -> Result<Arc<PF>, WireError> {
+        self.map.create(f).context(CreateObjectError {})
+    }
+
+    fn add_remote_object(&self, id: ObjectId, object: PF) {
+        self.map.add(id, object);
+    }
+
+    fn remove_object(&self, id: ObjectId) {
+        self.map.remove(id);
+    }
+}
 
 /// The send half of the [Wayland] wire protocol.
 ///
@@ -199,6 +224,7 @@ where
         + MakeMessage<R, Output = <PF as RecvMsg<R>>::Output>,
     R: Role,
     T: IoChannel + Unpin,
+    Extractor: ExtractIndex<R>,
 {
     type Item = Result<RecvMsgType<R, PF>, WireError>;
 
