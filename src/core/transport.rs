@@ -203,8 +203,6 @@ impl DispatchMessage {
         self.inner.object_id()
     }
 
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn opcode(&self) -> u16 {
         self.inner.opcode()
     }

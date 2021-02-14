@@ -18,7 +18,6 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use snafu::Snafu;
 
 mod codec;
-mod dispatch;
 mod role;
 mod store;
 mod transport;
