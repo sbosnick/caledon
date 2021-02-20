@@ -59,7 +59,7 @@ struct Map<SI> {
 
 #[derive(Debug)]
 struct IdSource<R, E = Extractor> {
-    pool: BitVec,
+    pool: BitVec<Lsb0, u64>,
     _phantom: PhantomData<(R, E)>,
 }
 
@@ -425,7 +425,7 @@ mod tests {
 
     #[test]
     fn full_server_id_source_allocate_is_error() {
-        let pool = bitvec![1; SERVER_ID_MAX - SERVER_ID_BASE];
+        let pool = bitvec![Lsb0, u64; 1; SERVER_ID_MAX - SERVER_ID_BASE];
 
         let mut sut = IdSource::<ServerRole> {
             pool,
@@ -438,7 +438,7 @@ mod tests {
 
     #[test]
     fn full_client_id_source_allocate_is_error() {
-        let pool = bitvec![1; (SERVER_ID_BASE - 1) - CLIENT_ID_BASE];
+        let pool = bitvec![Lsb0, u64; 1; (SERVER_ID_BASE - 1) - CLIENT_ID_BASE];
 
         let mut sut = IdSource::<ClientRole> {
             pool,
