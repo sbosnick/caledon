@@ -699,7 +699,13 @@ mod tests {
         block_on(sut.send(item)).expect("Unable to send message.");
         let result = block_on(sut.next());
 
-        assert_matches!(result, Some(Ok(DispatchMessage{ inner: _, fd: Some(_) })));
+        assert_matches!(
+            result,
+            Some(Ok(DispatchMessage {
+                inner: _,
+                fd: Some(_)
+            }))
+        );
     }
 
     #[test]
