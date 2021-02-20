@@ -8,12 +8,14 @@
 
 //! The storage for the the live protocol objects.
 //!
-//! An [`ObjectMap`] bridges the [`transport`] and [`dispatch`] modules
-//! with its implementations of [`MessageFdMap`] and [`TargetStore`]
-//! respectively.
+//! An [`ObjectMap`] provides a means for the [`wire`] module to track the live protocol objects
+//! for the purpose of dispatching an incoming [`Message`]. It also exposes this information to the
+//! [`transport`] module through its implementation of [`MessageFdMap`].
+//!
 //!
 //! [`transport`]: super::transport
-//! [`dispatch`]: super::dispatch
+//! [`wire`]: super::wire
+//! [`Message`]: super::Message
 
 use std::{
     convert::TryInto,
@@ -241,7 +243,7 @@ impl<R: Role, E: ExtractIndex<R>> IdSource<R, E> {
     fn allocate_id(&mut self) -> Result<ObjectId, ObjectIdExhastedError> {
         if self.pool.all() {
             self.pool.push(true);
-            E::to_object_id(self.pool.len() - 1)
+            E::make_object_id(self.pool.len() - 1)
         } else {
             let idx = self
                 .pool
@@ -251,7 +253,7 @@ impl<R: Role, E: ExtractIndex<R>> IdSource<R, E> {
                 .context(ObjectIdExhastedContext {})?;
 
             self.pool.set(idx, true);
-            E::to_object_id(idx)
+            E::make_object_id(idx)
         }
     }
 
@@ -272,7 +274,7 @@ impl<R: Role> Default for IdSource<R, Extractor> {
 pub(crate) trait ExtractIndex<R: Role> {
     fn is_local_object_id(id: ObjectId) -> bool;
     fn from_object_id(id: ObjectId) -> usize;
-    fn to_object_id(index: usize) -> Result<ObjectId, ObjectIdExhastedError>;
+    fn make_object_id(index: usize) -> Result<ObjectId, ObjectIdExhastedError>;
 }
 
 #[derive(Debug)]
@@ -284,7 +286,7 @@ impl ExtractIndex<ServerRole> for Extractor {
         id as usize - SERVER_ID_BASE
     }
 
-    fn to_object_id(index: usize) -> Result<ObjectId, ObjectIdExhastedError> {
+    fn make_object_id(index: usize) -> Result<ObjectId, ObjectIdExhastedError> {
         ensure!(
             index < SERVER_ID_MAX - SERVER_ID_BASE,
             ObjectIdExhastedContext {}
@@ -304,7 +306,7 @@ impl ExtractIndex<ClientRole> for Extractor {
         id as usize - CLIENT_ID_BASE
     }
 
-    fn to_object_id(index: usize) -> Result<ObjectId, ObjectIdExhastedError> {
+    fn make_object_id(index: usize) -> Result<ObjectId, ObjectIdExhastedError> {
         ensure!(
             index < ((SERVER_ID_BASE - 1) - CLIENT_ID_BASE),
             ObjectIdExhastedContext {}

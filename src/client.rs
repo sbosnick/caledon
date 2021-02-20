@@ -29,12 +29,12 @@ use crate::{
 pub struct Display<T> {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
-    inner: DisplayImpl<
-        WireSend<T, ClientRole, protocols::Protocols>,
-        WireRecv<T, ClientRole, protocols::Protocols>,
-        WireState<ClientRole, protocols::Protocols>,
-    >,
+    inner: DisplayImpl<ClientSend<T>, ClientRecv<T>, ClientState>,
 }
+
+type ClientSend<T> = WireSend<T, ClientRole, protocols::Protocols>;
+type ClientRecv<T> = WireRecv<T, ClientRole, protocols::Protocols>;
+type ClientState = WireState<ClientRole, protocols::Protocols>;
 
 impl<T> Display<T>
 where

@@ -196,6 +196,10 @@ where
         })
 }
 
+// NOTE: to_pathbuf is passed to convert_or_default in a postion that expects a Result return
+// value. Some of the other functions passed in that postion can return an Err variant so we have
+// to allow the unnessary wraps here.
+#[allow(clippy::unnessary_wraps)]
 fn to_pathbuf(path: &Path) -> Result<PathBuf> {
     Ok(path.to_path_buf())
 }

@@ -32,13 +32,18 @@ use super::{
     FromOpcodeError, ObjectId, OpCode, ProtocolFamily,
 };
 
+/// The [Wayland] wire protocol is a triple of a sender, receiver, and the state for a given
+/// [`Role`] (the generic type `R`), and [`ProtocolFamily`] (`PF`). It is instantiated on a given
+/// [`IoChannel`] (`T`).
+///
+/// [Wayland]: https://wayland.freedesktop.org/
+pub(crate) type WireProtocol<T, R, PF> = (WireSend<T, R, PF>, WireRecv<T, R, PF>, WireState<R, PF>);
+
 /// Create the [Wayland] wire protocol sender, receiver, and state for
 /// the given channel.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-pub(crate) fn make_wire_protocol<T, R, PF>(
-    channel: T,
-) -> (WireSend<T, R, PF>, WireRecv<T, R, PF>, WireState<R, PF>)
+pub(crate) fn make_wire_protocol<T, R, PF>(channel: T) -> WireProtocol<T, R, PF>
 where
     PF: ProtocolFamily + HasFd<R> + SendMsg<R>,
     R: Role,
@@ -160,7 +165,7 @@ where
     R: Role,
 {
     #[pin]
-    inner: SplitSink<WaylandTransport<T, R, PF, ObjectMap<PF, R>>, SendMsgType<R, PF>>,
+    inner: SplitSink<Transport<T, R, PF>, SendMsgType<R, PF>>,
 }
 
 impl<T, R, PF> Sink<SendMsgType<R, PF>> for WireSend<T, R, PF>
@@ -212,7 +217,7 @@ where
 #[pin_project]
 pub(crate) struct WireRecv<T, R, PF> {
     #[pin]
-    inner: SplitStream<WaylandTransport<T, R, PF, ObjectMap<PF, R>>>,
+    inner: SplitStream<Transport<T, R, PF>>,
     map: ObjectMap<PF, R>,
 }
 
@@ -250,3 +255,5 @@ where
         })
     }
 }
+
+type Transport<T, R, PF> = WaylandTransport<T, R, PF, ObjectMap<PF, R>>;
