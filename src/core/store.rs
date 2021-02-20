@@ -25,8 +25,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitvec::prelude::*;
-use snafu::{ensure, OptionExt, Snafu};
+use snafu::{ensure, Snafu};
+use vob::Vob;
 
 use super::{
     role::{HasFd, Role, ServerRole},
@@ -59,7 +59,7 @@ struct Map<SI> {
 
 #[derive(Debug)]
 struct IdSource<R, E = Extractor> {
-    pool: BitVec<Lsb0, u64>,
+    pool: Vob,
     _phantom: PhantomData<(R, E)>,
 }
 
@@ -241,31 +241,27 @@ impl<SI> Default for Map<SI> {
 
 impl<R: Role, E: ExtractIndex<R>> IdSource<R, E> {
     fn allocate_id(&mut self) -> Result<ObjectId, ObjectIdExhastedError> {
-        if self.pool.all() {
-            self.pool.push(true);
-            E::make_object_id(self.pool.len() - 1)
-        } else {
-            let idx = self
-                .pool
-                .iter()
-                .enumerate()
-                .find_map(|(idx, val)| if !val { Some(idx) } else { None })
-                .context(ObjectIdExhastedContext {})?;
-
-            self.pool.set(idx, true);
-            E::make_object_id(idx)
+        match self.pool.iter_unset_bits(..).next() {
+            Some(idx) => {
+                self.pool.set(idx, true);
+                E::make_object_id(idx)
+            }
+            None => {
+                self.pool.push(true);
+                E::make_object_id(self.pool.len() - 1)
+            }
         }
     }
 
     fn release_id(&mut self, id: ObjectId) {
-        self.pool.set(E::from_object_id(id), false)
+        self.pool.set(E::from_object_id(id), false);
     }
 }
 
 impl<R: Role> Default for IdSource<R, Extractor> {
     fn default() -> Self {
         Self {
-            pool: BitVec::new(),
+            pool: Vob::new(),
             _phantom: PhantomData,
         }
     }
@@ -324,7 +320,7 @@ impl ExtractIndex<ClientRole> for Extractor {
 mod tests {
     use super::*;
 
-    use bitvec::bitvec;
+    use vob::vob;
 
     use crate::core::{
         role::{ClientRole, ServerRole},
@@ -425,7 +421,7 @@ mod tests {
 
     #[test]
     fn full_server_id_source_allocate_is_error() {
-        let pool = bitvec![Lsb0, u64; 1; SERVER_ID_MAX - SERVER_ID_BASE];
+        let pool = vob![SERVER_ID_MAX - SERVER_ID_BASE; true];
 
         let mut sut = IdSource::<ServerRole> {
             pool,
@@ -438,7 +434,7 @@ mod tests {
 
     #[test]
     fn full_client_id_source_allocate_is_error() {
-        let pool = bitvec![Lsb0, u64; 1; (SERVER_ID_BASE - 1) - CLIENT_ID_BASE];
+        let pool = vob![(SERVER_ID_BASE - 1) - CLIENT_ID_BASE; true];
 
         let mut sut = IdSource::<ClientRole> {
             pool,
