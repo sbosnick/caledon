@@ -70,7 +70,7 @@ pub struct Decimal(u32);
 /// because that is a type alais for `i32` which is already the int `Argument` type.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Fd(RawFd);
 
 /// The signature for a [Wayland] message.
@@ -496,4 +496,4 @@ mod private {
 }
 
 #[cfg(test)]
-mod testutil;
+pub mod testutil;

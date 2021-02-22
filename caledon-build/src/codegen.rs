@@ -89,6 +89,7 @@ where
 
     quote! {
             #[doc = "The list of protocols implemented by caledon."]
+            #[derive(Debug, PartialEq)]
             pub enum Protocols {
                 #(#entries,)*
             }
@@ -190,6 +191,7 @@ where
 
     quote! {
             #[doc = #enum_doc]
+            #[derive(Debug, PartialEq)]
             pub enum #ident {
                 #(#entries,)*
             }

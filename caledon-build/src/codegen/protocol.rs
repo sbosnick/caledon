@@ -49,16 +49,19 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
             use crate::core::{Decimal, Fd};
 
             #[doc = #protocol_doc]
+            #[derive(Debug, PartialEq)]
             pub enum #protocol_ident {
                 #(#entries,)*
             }
 
             #[doc = #protocol_requests_doc]
+            #[derive(Debug, PartialEq)]
             pub enum #protocol_requests_ident {
                 #(#request_entries,)*
             }
 
             #[doc = #protocol_events_doc]
+            #[derive(Debug, PartialEq)]
             pub enum #protocol_events_ident {
                 #(#event_entries,)*
             }

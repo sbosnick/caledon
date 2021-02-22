@@ -73,6 +73,7 @@ fn generate_interface_struct(
 
     quote! {
         #[doc = #interface_doc]
+        #[derive(Debug, PartialEq)]
         pub struct #interface_ident {
             id: ObjectId,
         }
@@ -81,6 +82,11 @@ fn generate_interface_struct(
             #[doc = #new_doc]
             pub fn new(id: ObjectId) -> Self {
                 Self { id }
+            }
+
+            #[doc = "Get the object id for this protocol object."]
+            pub fn id(&self) -> ObjectId {
+                self.id
             }
 
             #(#request_factories)*
@@ -168,6 +174,7 @@ where
 {
     quote! {
         #[doc = #doc]
+        #[derive(Debug, PartialEq)]
         pub enum #messages_ident {
             #(#entries,)*
         }

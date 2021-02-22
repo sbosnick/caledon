@@ -71,7 +71,9 @@ where
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub(crate) trait WaylandState<PF> {
-    fn create_object(&self, f: impl Fn(ObjectId) -> PF) -> Result<Arc<PF>, WireError>;
+    type Error;
+
+    fn create_object(&self, f: impl Fn(ObjectId) -> PF) -> Result<Arc<PF>, Self::Error>;
     fn add_remote_object(&self, id: ObjectId, object: PF);
     fn remove_object(&self, id: ObjectId);
 }
@@ -138,6 +140,8 @@ where
     Extractor: ExtractIndex<R>,
     R: Role,
 {
+    type Error = WireError;
+
     fn create_object(&self, f: impl Fn(ObjectId) -> PF) -> Result<Arc<PF>, WireError> {
         self.map.create(f).context(CreateObjectError {})
     }

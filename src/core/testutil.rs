@@ -364,3 +364,7 @@ impl ProtocolFamilyMessageList for FamilyEvents {
         }
     }
 }
+
+pub fn new_object_id(id: u32) -> ObjectId {
+    ObjectId(id)
+}

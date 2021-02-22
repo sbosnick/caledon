@@ -30,6 +30,7 @@ pub(super) fn generate_request((opcode, request): (usize, &Request)) -> TokenStr
 
     quote! {
         #[doc = #request_doc]
+        #[derive(Debug, PartialEq)]
         pub struct #request_ident {
             sender: ObjectId,
             args: #signature,
@@ -89,6 +90,7 @@ pub(super) fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
 
     quote! {
         #[doc = #event_doc]
+        #[derive(Debug, PartialEq)]
         pub struct #event_ident {
             sender: ObjectId,
             args: #signature,
