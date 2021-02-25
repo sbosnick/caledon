@@ -18,14 +18,13 @@ use super::{
     generate_event, generate_new_param, generate_request,
 };
 
-pub(super) fn generate_interface(interface: &Interface, interface_list: &Ident) -> TokenStream {
+pub(super) fn generate_interface(interface: &Interface) -> TokenStream {
     let interface_ident = interface.interface_ident();
     let mod_ident = interface.mod_ident();
     let mod_doc = format!("The messages for the {} interface.", interface.name());
     let requests = interface.requests().enumerate().map(generate_request);
     let events = interface.events().enumerate().map(generate_event);
-    let interface_struct =
-        generate_interface_struct(interface, &interface_ident, &mod_ident, interface_list);
+    let interface_struct = generate_interface_struct(interface, &interface_ident, &mod_ident);
     let requests_enum = generate_requests_enum(interface, &interface_ident);
     let events_enum = generate_events_enum(interface, &interface_ident);
 
@@ -59,7 +58,6 @@ fn generate_interface_struct(
     interface: &Interface,
     interface_ident: &Ident,
     mod_ident: &Ident,
-    interface_list: &Ident,
 ) -> TokenStream {
     let enum_entry_ident = interface.enum_entry_ident();
     let interface_doc = format_long_doc(interface, |name| format!("The {} interface.", name));
@@ -97,22 +95,22 @@ fn generate_interface_struct(
         impl Interface for #interface_ident {
             type Requests = #mod_ident::Requests;
             type Events = #mod_ident::Events;
-            type Protocol = #interface_list;
+            type Protocol = Protocol;
         }
 
-        impl From<#interface_ident> for #interface_list {
+        impl From<#interface_ident> for Protocol {
             fn from(t: #interface_ident) -> Self {
                 Self::#enum_entry_ident(t)
             }
         }
 
-        impl TryFrom<#interface_list> for #interface_ident {
+        impl TryFrom<Protocol> for #interface_ident {
             type Error = crate::core::ConversionError;
 
-            fn try_from(i: #interface_list) -> Result<Self, Self::Error> {
+            fn try_from(i: Protocol) -> Result<Self, Self::Error> {
                 #[allow(unreachable_patterns)]
                 match i {
-                    #interface_list::#enum_entry_ident(inner) => Ok(inner),
+                    Protocol::#enum_entry_ident(inner) => Ok(inner),
                     _ => Err(crate::core::ConversionError::interface()),
                 }
             }

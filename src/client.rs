@@ -136,7 +136,7 @@ where
     WS: WaylandState<protocols::Protocols, Error = E>,
     E: error::Error,
     F: Fn(ObjectId) -> I,
-    I: Into<protocols::wayland::WaylandProtocol>,
+    I: Into<protocols::wayland::Protocol>,
 {
     use protocols::Protocols::Wayland;
     let phase = ClientPhase::InitialHandshake;
@@ -147,7 +147,7 @@ where
 }
 
 fn get_core_obj_id(object: &protocols::Protocols) -> ObjectId {
-    use protocols::wayland::WaylandProtocol::{WlCallback, WlDisplay, WlRegistry};
+    use protocols::wayland::Protocol::{WlCallback, WlDisplay, WlRegistry};
     use protocols::Protocols::Wayland;
     match object {
         Wayland(WlDisplay(obj)) => obj.id(),
@@ -162,7 +162,7 @@ fn call_display<F, R>(object: &protocols::Protocols, f: F) -> R
 where
     F: Fn(&protocols::wayland::WlDisplay) -> R,
 {
-    use protocols::wayland::WaylandProtocol::WlDisplay;
+    use protocols::wayland::Protocol::WlDisplay;
     use protocols::Protocols::Wayland;
 
     match object {

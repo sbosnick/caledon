@@ -192,10 +192,6 @@ impl Protocol {
         format_ident!("{}", self.name.to_snake_case())
     }
 
-    pub fn protocol_ident(&self) -> Ident {
-        format_ident!("{}Protocol", self.name.to_class_case())
-    }
-
     pub fn protocol_requests_ident(&self) -> Ident {
         format_ident!("{}ProtocolRequests", self.name.to_class_case())
     }

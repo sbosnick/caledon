@@ -213,12 +213,11 @@ where
 fn generate_protocol_list_entry(protocol: &Protocol) -> TokenStream {
     let entry = protocol.enum_entry_ident();
     let mod_ident = protocol.mod_ident();
-    let protocol_ident = protocol.protocol_ident();
     let entry_doc = format_short_doc(protocol, |name| format!("The {} protocol.", name));
 
     quote! {
         #[doc = #entry_doc]
-        #entry(#mod_ident::#protocol_ident)
+        #entry(#mod_ident::Protocol)
     }
 }
 
@@ -288,14 +287,13 @@ where
     iter.flat_map(move |p| {
         let penum_entry = p.enum_entry_ident();
         let pmod = p.mod_ident();
-        let pmlist_entry = p.protocol_ident();
-        p.interfaces().map(move |i| (penum_entry.clone(), pmod.clone(), pmlist_entry.clone(), i))
-    }).map(move |(penum_entry, pmod, pmlist_entry, i)| {
+        p.interfaces().map(move |i| (penum_entry.clone(), pmod.clone(),  i))
+    }).map(move |(penum_entry, pmod,  i)| {
         let ienum_entry = i.enum_entry_ident();
         let iface = i.interface_ident();
 
         quote! {
-            Protocols::#penum_entry(self::#pmod::#pmlist_entry::#ienum_entry(_)) => <self::#pmod::#iface as Interface>::#ident::has_fd(opcode),
+            Protocols::#penum_entry(self::#pmod::Protocol::#ienum_entry(_)) => <self::#pmod::#iface as Interface>::#ident::has_fd(opcode),
         }
     })
 }
@@ -313,23 +311,15 @@ where
         let penum_entry = p.enum_entry_ident();
         let pmod = p.mod_ident();
         let pmessage = f(p);
-        let pmlist_entry = p.protocol_ident();
-        p.interfaces().map(move |i| {
-            (
-                penum_entry.clone(),
-                pmod.clone(),
-                pmlist_entry.clone(),
-                pmessage.clone(),
-                i,
-            )
-        })
+        p.interfaces()
+            .map(move |i| (penum_entry.clone(), pmod.clone(), pmessage.clone(), i))
     })
-    .map(move |(penum_entry, pmod, pmlist_entry, pmessage, i)| {
+    .map(move |(penum_entry, pmod, pmessage, i)| {
         let ienum_entry = i.enum_entry_ident();
         let iface = i.interface_ident();
 
         quote! {
-            Protocols::#penum_entry(self::#pmod::#pmlist_entry::#ienum_entry(_)) => {
+            Protocols::#penum_entry(self::#pmod::Protocol::#ienum_entry(_)) => {
                 <self::#pmod::#iface as Interface>::#ident::from_opcode(opcode, msg).map(|m| {
                     #ident::#penum_entry(#pmod::#pmessage::#ienum_entry(m))
                 })

@@ -17,7 +17,6 @@ use quote::quote;
 
 pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
     let mod_ident = protocol.mod_ident();
-    let protocol_ident = protocol.protocol_ident();
     let protocol_requests_ident = protocol.protocol_requests_ident();
     let protocol_events_ident = protocol.protocol_events_ident();
     let enum_entry_ident = protocol.enum_entry_ident();
@@ -30,9 +29,7 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
     let entries = protocol.interfaces().map(generate_interface_entry);
     let request_entries = protocol.interfaces().map(generate_protocol_request_entry);
     let event_entries = protocol.interfaces().map(generate_protocol_event_entry);
-    let interfaces = protocol
-        .interfaces()
-        .map(|i| generate_interface(i, &protocol_ident));
+    let interfaces = protocol.interfaces().map(|i| generate_interface(i));
 
     quote! {
         #[allow(clippy::too_many_arguments)]
@@ -43,14 +40,14 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
             #[allow(unused_imports)]
             use std::ffi::CString;
 
-            use crate::core::{Interface, ObjectId, Protocol, ProtocolMessageList};
+            use crate::core::{self, Interface, ObjectId, ProtocolMessageList};
 
             #[allow(unused_imports)]
             use crate::core::{Decimal, Fd};
 
             #[doc = #protocol_doc]
             #[derive(Debug, PartialEq)]
-            pub enum #protocol_ident {
+            pub enum Protocol {
                 #(#entries,)*
             }
 
@@ -66,20 +63,20 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
                 #(#event_entries,)*
             }
 
-            impl Protocol for #protocol_ident {
+            impl core::Protocol for Protocol {
                 type Requests = #protocol_requests_ident;
                 type Events = #protocol_events_ident;
 
                 type ProtocolFamily = super::Protocols;
             }
 
-            impl From<#protocol_ident> for super::Protocols {
-                fn from(t: #protocol_ident) -> Self {
+            impl From<Protocol> for super::Protocols {
+                fn from(t: Protocol) -> Self {
                     Self::#enum_entry_ident(t)
                 }
             }
 
-            impl TryFrom<super::Protocols> for #protocol_ident {
+            impl TryFrom<super::Protocols> for Protocol {
                 type Error = crate::core::ConversionError;
 
                 fn try_from(p: super::Protocols) -> Result<Self, Self::Error> {
@@ -92,11 +89,11 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
             }
 
             impl ProtocolMessageList for #protocol_requests_ident {
-                type Protocol = #protocol_ident;
+                type Protocol = Protocol;
             }
 
             impl ProtocolMessageList for #protocol_events_ident {
-                type  Protocol = #protocol_ident;
+                type  Protocol = Protocol;
             }
 
             #(#interfaces)*
