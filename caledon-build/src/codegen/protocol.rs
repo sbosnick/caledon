@@ -17,8 +17,6 @@ use quote::quote;
 
 pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
     let mod_ident = protocol.mod_ident();
-    let protocol_requests_ident = protocol.protocol_requests_ident();
-    let protocol_events_ident = protocol.protocol_events_ident();
     let enum_entry_ident = protocol.enum_entry_ident();
     let mod_doc = format_long_doc(protocol, |name| {
         format!("Caledon types for the {} protocol.", name)
@@ -53,19 +51,19 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
 
             #[doc = #protocol_requests_doc]
             #[derive(Debug, PartialEq)]
-            pub enum #protocol_requests_ident {
+            pub enum Requests {
                 #(#request_entries,)*
             }
 
             #[doc = #protocol_events_doc]
             #[derive(Debug, PartialEq)]
-            pub enum #protocol_events_ident {
+            pub enum Events {
                 #(#event_entries,)*
             }
 
             impl core::Protocol for Protocol {
-                type Requests = #protocol_requests_ident;
-                type Events = #protocol_events_ident;
+                type Requests = Requests;
+                type Events = Events;
 
                 type ProtocolFamily = super::Protocols;
             }
@@ -88,11 +86,11 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
                 }
             }
 
-            impl ProtocolMessageList for #protocol_requests_ident {
+            impl ProtocolMessageList for Requests {
                 type Protocol = Protocol;
             }
 
-            impl ProtocolMessageList for #protocol_events_ident {
+            impl ProtocolMessageList for Events {
                 type  Protocol = Protocol;
             }
 

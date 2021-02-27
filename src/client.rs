@@ -102,7 +102,7 @@ where
     E: error::Error + 'static,
 {
     async fn new(mut send: Si, _recv: St, state: WS) -> Result<Self, ClientErrorImpl<E>> {
-        use protocols::wayland::WaylandProtocolRequests::WlDisplay as WLD;
+        use protocols::wayland::Requests::WlDisplay as WLD;
         use protocols::Requests::Wayland;
         let phase = ClientPhase::InitialHandshake;
 
@@ -217,7 +217,7 @@ mod tests {
             Requests::{GetRegistry, Sync},
             SyncRequest,
         };
-        use protocols::wayland::WaylandProtocolRequests::WlDisplay;
+        use protocols::wayland::Requests::WlDisplay;
         use protocols::Requests::Wayland;
         let state = StubState::default();
         let (send, recv) = mpsc::channel(10);

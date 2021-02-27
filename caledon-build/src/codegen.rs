@@ -79,13 +79,8 @@ where
     let request_has_fd_entries = generate_has_fd_entries(protocols.clone(), requests_ident.clone());
     let event_has_fd_entries = generate_has_fd_entries(protocols.clone(), events_ident.clone());
     let make_request_message_entries =
-        generate_make_message_entries(protocols.clone(), requests_ident.clone(), |p| {
-            p.protocol_requests_ident()
-        });
-    let make_event_message_entries =
-        generate_make_message_entries(protocols, events_ident.clone(), |p| {
-            p.protocol_events_ident()
-        });
+        generate_make_message_entries(protocols.clone(), requests_ident.clone());
+    let make_event_message_entries = generate_make_message_entries(protocols, events_ident.clone());
 
     quote! {
             #[doc = "The list of protocols implemented by caledon."]
@@ -143,7 +138,6 @@ where
         &"requests",
         generate_family_request_entry,
         |i| i.requests(),
-        |p| p.protocol_requests_ident(),
     )
 }
 
@@ -157,23 +151,20 @@ where
         &"events",
         generate_family_event_entry,
         |i| i.events(),
-        |p| p.protocol_events_ident(),
     )
 }
 
-fn generate_pf_message_list<'a, I, F, G, H, M, MI>(
+fn generate_pf_message_list<'a, I, F, G, /*H,*/ M, MI>(
     protocols: I,
     ident: Ident,
     doc_word: &str,
     generate_family_entry: F,
     get_interface_messages: G,
-    get_messages_ident: H,
 ) -> TokenStream
 where
     I: Iterator<Item = &'a Protocol> + Clone + 'a,
     F: Fn(&Protocol) -> TokenStream,
     G: Fn(&'a Interface) -> MI + 'a,
-    H: Fn(&'a Protocol) -> Ident + 'a,
     M: Message,
     MI: Iterator<Item = M> + 'a,
 {
@@ -182,12 +173,7 @@ where
         doc_word
     );
     let entries = protocols.clone().map(generate_family_entry);
-    let handle_entries = generate_handler_entries(
-        protocols,
-        ident.clone(),
-        get_interface_messages,
-        get_messages_ident,
-    );
+    let handle_entries = generate_handler_entries(protocols, ident.clone(), get_interface_messages);
 
     quote! {
             #[doc = #enum_doc]
@@ -224,58 +210,53 @@ fn generate_protocol_list_entry(protocol: &Protocol) -> TokenStream {
 fn generate_family_request_entry(protocol: &Protocol) -> TokenStream {
     let entry = protocol.enum_entry_ident();
     let mod_ident = protocol.mod_ident();
-    let request_ident = protocol.protocol_requests_ident();
     let entry_doc = format_short_doc(protocol, |name| {
         format!("The requests for the {} protocol.", name)
     });
 
     quote! {
         #[doc = #entry_doc]
-        #entry(#mod_ident::#request_ident)
+        #entry(#mod_ident::Requests)
     }
 }
 
 fn generate_family_event_entry(protocol: &Protocol) -> TokenStream {
     let entry = protocol.enum_entry_ident();
     let mod_ident = protocol.mod_ident();
-    let event_ident = protocol.protocol_events_ident();
     let entry_doc = format_short_doc(protocol, |name| {
         format!("The events for the {} protocol.", name)
     });
 
     quote! {
         #[doc = #entry_doc]
-        #entry(#mod_ident::#event_ident)
+        #entry(#mod_ident::Events)
     }
 }
 
-fn generate_handler_entries<'a, I, F, G, M, MI>(
+fn generate_handler_entries<'a, I, F, /*G,*/ M, MI>(
     iter: I,
     ident: Ident,
     f: F,
-    g: G,
 ) -> impl Iterator<Item = TokenStream> + 'a
 where
     I: Iterator<Item = &'a Protocol> + 'a,
     F: Fn(&'a Interface) -> MI + 'a,
-    G: Fn(&'a Protocol) -> Ident + 'a,
     M: Message,
     MI: Iterator<Item = M> + 'a,
 {
     iter.flat_map(move |p| {
         let penum_entry = p.enum_entry_ident();
         let pmod = p.mod_ident();
-        let pmlist_entry = g(p);
-        p.interfaces().map(move |i| (penum_entry.clone(), pmod.clone(), pmlist_entry.clone(), i))
+        p.interfaces().map(move |i| (penum_entry.clone(), pmod.clone(), i))
     })
-    .flat_map(move |(penum_entry, pmod, pmlist_entry, i)| {
+    .flat_map(move |(penum_entry, pmod, i)| {
         let imod = i.mod_ident();
         let ienum_entry = i.enum_entry_ident();
-        f(i).map(move |m| (penum_entry.clone(), pmod.clone(), pmlist_entry.clone(), imod.clone(), ienum_entry.clone(), m))
-    }).map(move |(penum_entry, pmod, pmlist_entry, imod, ienum_entry, m)| {
+        f(i).map(move |m| (penum_entry.clone(), pmod.clone(), imod.clone(), ienum_entry.clone(), m))
+    }).map(move |(penum_entry, pmod, imod, ienum_entry, m)| {
         let menum_entry = m.enum_entry_ident();
         quote! {
-            #ident::#penum_entry(self::#pmod::#pmlist_entry::#ienum_entry(self::#pmod::#imod::#ident::#menum_entry(msg))) => handler.handle(msg)
+            #ident::#penum_entry(self::#pmod::#ident::#ienum_entry(self::#pmod::#imod::#ident::#menum_entry(msg))) => handler.handle(msg)
         }
     })
 }
@@ -298,30 +279,27 @@ where
     })
 }
 
-fn generate_make_message_entries<'a, I, F>(
+fn generate_make_message_entries<'a, I>(
     iter: I,
     ident: Ident,
-    f: F,
 ) -> impl Iterator<Item = TokenStream> + 'a
 where
     I: Iterator<Item = &'a Protocol> + 'a,
-    F: Fn(&Protocol) -> Ident + 'a,
 {
     iter.flat_map(move |p| {
         let penum_entry = p.enum_entry_ident();
         let pmod = p.mod_ident();
-        let pmessage = f(p);
         p.interfaces()
-            .map(move |i| (penum_entry.clone(), pmod.clone(), pmessage.clone(), i))
+            .map(move |i| (penum_entry.clone(), pmod.clone(), i))
     })
-    .map(move |(penum_entry, pmod, pmessage, i)| {
+    .map(move |(penum_entry, pmod, i)| {
         let ienum_entry = i.enum_entry_ident();
         let iface = i.interface_ident();
 
         quote! {
             Protocols::#penum_entry(self::#pmod::Protocol::#ienum_entry(_)) => {
                 <self::#pmod::#iface as Interface>::#ident::from_opcode(opcode, msg).map(|m| {
-                    #ident::#penum_entry(#pmod::#pmessage::#ienum_entry(m))
+                    #ident::#penum_entry(#pmod::#ident::#ienum_entry(m))
                 })
             }
         }
