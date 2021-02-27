@@ -102,7 +102,6 @@ where
     E: error::Error + 'static,
 {
     async fn new(mut send: Si, _recv: St, state: WS) -> Result<Self, ClientErrorImpl<E>> {
-        use protocols::wayland::Requests::WlDisplay as WLD;
         use protocols::Requests::Wayland;
         let phase = ClientPhase::InitialHandshake;
 
@@ -110,15 +109,17 @@ where
         let registry = create_object(&state, |id| WlRegistry::new(id))?;
         let callback = create_object(&state, |id| WlCallback::new(id))?;
 
-        send.send(Wayland(WLD(call_display(&display, |d| {
-            d.get_registry_request(get_core_obj_id(&registry))
-        })
-        .into())))
-            .await
-            .context(Transport { phase })?;
-        send.send(Wayland(WLD(call_display(&display, |d| {
+        send.send(Wayland(
+            call_display(&display, |d| {
+                d.get_registry_request(get_core_obj_id(&registry))
+            })
+            .into(),
+        ))
+        .await
+        .context(Transport { phase })?;
+        send.send(Wayland(call_display(&display, |d| {
             d.sync_request(get_core_obj_id(&callback)).into()
-        }))))
+        })))
         .await
         .context(Transport { phase })?;
 
@@ -212,12 +213,8 @@ mod tests {
 
     #[tokio::test]
     async fn display_impl_new_sends_initial_requests() {
-        use protocols::wayland::wl_display::{
-            GetRegistryRequest,
-            Requests::{GetRegistry, Sync},
-            SyncRequest,
-        };
-        use protocols::wayland::Requests::WlDisplay;
+        use protocols::wayland::wl_display::{GetRegistryRequest, SyncRequest};
+        //use protocols::wayland::Requests::WlDisplay;
         use protocols::Requests::Wayland;
         let state = StubState::default();
         let (send, recv) = mpsc::channel(10);
@@ -231,14 +228,8 @@ mod tests {
         assert_eq!(
             result,
             vec![
-                Wayland(WlDisplay(GetRegistry(GetRegistryRequest::new(
-                    new_object_id(1),
-                    new_object_id(2)
-                )))),
-                Wayland(WlDisplay(Sync(SyncRequest::new(
-                    new_object_id(1),
-                    new_object_id(3)
-                )))),
+                Wayland(GetRegistryRequest::new(new_object_id(1), new_object_id(2)).into()),
+                Wayland(SyncRequest::new(new_object_id(1), new_object_id(3)).into()),
             ]
         );
     }

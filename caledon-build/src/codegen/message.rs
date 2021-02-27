@@ -18,7 +18,10 @@ use super::{
     generate_arg_type, generate_new_param,
 };
 
-pub(super) fn generate_request((opcode, request): (usize, &Request)) -> TokenStream {
+pub(super) fn generate_request(
+    (opcode, request): (usize, &Request),
+    ienum_entry: &Ident,
+) -> TokenStream {
     let request_ident = request.request_ident();
     let request_doc = format_long_doc(request, |name| format!("The {} request.", name));
     let enum_entry_ident = request.enum_entry_ident();
@@ -75,10 +78,28 @@ pub(super) fn generate_request((opcode, request): (usize, &Request)) -> TokenStr
                 }
             }
         }
+
+        impl From<#request_ident> for super::Requests {
+            fn from(r: #request_ident) -> Self {
+                Self::#ienum_entry(r.into())
+            }
+        }
+
+        impl TryFrom<super::Requests> for #request_ident {
+            type Error = crate::core::ConversionError;
+
+            fn try_from(i: super::Requests) -> Result<Self, Self::Error> {
+                #[allow(unreachable_patterns)]
+                match i {
+                    super::Requests::#ienum_entry(Requests::#enum_entry_ident(inner)) => Ok(inner),
+                    _ => Err(crate::core::ConversionError::message()),
+                }
+            }
+        }
     }
 }
 
-pub(super) fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
+pub(super) fn generate_event((opcode, event): (usize, &Event), ienum_entry: &Ident) -> TokenStream {
     let event_ident = event.event_ident();
     let event_doc = format_long_doc(event, |name| format!("The {} event.", name));
     let opcode: u16 = opcode
@@ -135,6 +156,24 @@ pub(super) fn generate_event((opcode, event): (usize, &Event)) -> TokenStream {
                 }
             }
         }
+
+        impl From<#event_ident> for super::Events {
+            fn from(e: #event_ident) -> Self {
+                Self::#ienum_entry(e.into())
+            }
+        }
+
+        impl TryFrom<super::Events> for #event_ident {
+            type Error = crate::core::ConversionError;
+
+            fn try_from(i: super::Events) -> Result<Self, Self::Error> {
+                #[allow(unreachable_patterns)]
+                match i {
+                    super::Events::#ienum_entry(Events::#enum_entry_ident(inner)) => Ok(inner),
+                    _ => Err(crate::core::ConversionError::message()),
+                }
+            }
+         }
     }
 }
 

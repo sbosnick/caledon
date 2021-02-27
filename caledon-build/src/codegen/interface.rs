@@ -22,8 +22,15 @@ pub(super) fn generate_interface(interface: &Interface) -> TokenStream {
     let interface_ident = interface.interface_ident();
     let mod_ident = interface.mod_ident();
     let mod_doc = format!("The messages for the {} interface.", interface.name());
-    let requests = interface.requests().enumerate().map(generate_request);
-    let events = interface.events().enumerate().map(generate_event);
+    let ienum_entry = interface.enum_entry_ident();
+    let requests = interface
+        .requests()
+        .enumerate()
+        .map(|m| generate_request(m, &ienum_entry));
+    let events = interface
+        .events()
+        .enumerate()
+        .map(|m| generate_event(m, &ienum_entry));
     let interface_struct = generate_interface_struct(interface, &interface_ident, &mod_ident);
     let requests_enum = generate_requests_enum(interface, &interface_ident);
     let events_enum = generate_events_enum(interface, &interface_ident);
@@ -157,6 +164,7 @@ fn generate_events_enum(interface: &Interface, interface_ident: &Ident) -> Token
         interface_ident,
     )
 }
+
 fn generate_messages_enum<E, F, H>(
     doc: String,
     entries: E,
