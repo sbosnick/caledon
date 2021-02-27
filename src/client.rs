@@ -214,7 +214,6 @@ mod tests {
     #[tokio::test]
     async fn display_impl_new_sends_initial_requests() {
         use protocols::wayland::wl_display::{GetRegistryRequest, SyncRequest};
-        //use protocols::wayland::Requests::WlDisplay;
         use protocols::Requests::Wayland;
         let state = StubState::default();
         let (send, recv) = mpsc::channel(10);
