@@ -14,8 +14,8 @@ use std::{error, fmt, marker::PhantomData, sync::Arc};
 
 use futures_core::Stream;
 use futures_sink::Sink;
-use futures_util::sink::SinkExt;
-use snafu::{ResultExt, Snafu};
+use futures_util::{future, sink::SinkExt, stream::TryStreamExt};
+use snafu::{IntoError, ResultExt, Snafu};
 
 use crate::{
     core::{
@@ -74,6 +74,9 @@ pub struct ClientError(ClientErrorImpl<WireError>);
 enum ClientErrorImpl<E: error::Error + 'static> {
     #[snafu(display("Error with the underlying communication channel during the {}", phase))]
     Transport { source: E, phase: ClientPhase },
+
+    #[snafu(display("Fatal protocol error with the Wayland protocol during the {}", phase))]
+    Protocol { phase: ClientPhase },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -97,31 +100,43 @@ struct DisplayImpl<Si, St, WS, E> {
 impl<Si, St, WS, E> DisplayImpl<Si, St, WS, E>
 where
     Si: Sink<protocols::Requests, Error = E> + Unpin,
-    St: Stream<Item = Result<protocols::Events, E>>,
+    St: Stream<Item = Result<protocols::Events, E>> + Unpin,
     WS: WaylandState<protocols::Protocols, Error = E>,
     E: error::Error + 'static,
 {
-    async fn new(mut send: Si, _recv: St, state: WS) -> Result<Self, ClientErrorImpl<E>> {
-        use protocols::Requests::Wayland;
+    async fn new(mut send: Si, mut recv: St, state: WS) -> Result<Self, ClientErrorImpl<E>> {
+        use protocols::Requests::Wayland as WR;
         let phase = ClientPhase::InitialHandshake;
 
         let display = create_object(&state, |id| WlDisplay::new(id))?;
         let registry = create_object(&state, |id| WlRegistry::new(id))?;
         let callback = create_object(&state, |id| WlCallback::new(id))?;
 
-        send.send(Wayland(
-            call_display(&display, |d| {
-                d.get_registry_request(get_core_obj_id(&registry))
-            })
-            .into(),
-        ))
-        .await
-        .context(Transport { phase })?;
-        send.send(Wayland(call_display(&display, |d| {
+        send.feed(WR(call_display(&display, |d| {
+            d.get_registry_request(get_core_obj_id(&registry))
+        })
+        .into()))
+            .await
+            .context(Transport { phase })?;
+        send.feed(WR(call_display(&display, |d| {
             d.sync_request(get_core_obj_id(&callback)).into()
         })))
         .await
         .context(Transport { phase })?;
+        send.flush().await.context(Transport { phase })?;
+
+        let _globals = (&mut recv)
+            .try_take_while(|item| future::ok(!is_done(item)))
+            .map_err(|e| Transport { phase }.into_error(e))
+            .try_fold(Vec::new(), |mut g, i| {
+                if is_global(&i) {
+                    g.push(i);
+                    future::ok(g)
+                } else {
+                    future::err(Protocol { phase }.build())
+                }
+            })
+            .await?;
 
         Ok(Self {
             _phantom: PhantomData,
@@ -172,14 +187,41 @@ where
     }
 }
 
+fn is_global(event: &protocols::Events) -> bool {
+    use protocols::wayland::wl_registry::Events::Global;
+    use protocols::wayland::Events::WlRegistry;
+    use protocols::Events::Wayland;
+
+    if let Wayland(WlRegistry(Global(_))) = event {
+        true
+    } else {
+        false
+    }
+}
+
+fn is_done(event: &protocols::Events) -> bool {
+    use protocols::wayland::wl_callback::Events::Done;
+    use protocols::wayland::Events::WlCallback;
+    use protocols::Events::Wayland;
+
+    if let Wayland(WlCallback(Done(_))) = event {
+        true
+    } else {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
 
-    use std::sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
+    use std::{
+        ffi::CString,
+        sync::{
+            atomic::{AtomicU32, Ordering},
+            Arc,
+        },
     };
 
     use futures::{channel::mpsc, prelude::*, stream};
@@ -213,23 +255,50 @@ mod tests {
 
     #[tokio::test]
     async fn display_impl_new_sends_initial_requests() {
+        use protocols::wayland::wl_callback::DoneEvent;
         use protocols::wayland::wl_display::{GetRegistryRequest, SyncRequest};
-        use protocols::Requests::Wayland;
+        use protocols::Events::Wayland as WE;
+        use protocols::Requests::Wayland as WR;
         let state = StubState::default();
         let (send, recv) = mpsc::channel(10);
         let send = send.sink_map_err(|_| StubError);
 
-        DisplayImpl::new(send, stream::empty(), state)
-            .await
-            .expect("Error creating DisplayImpl.");
+        DisplayImpl::new(
+            send,
+            stream::once(future::ok(WE(DoneEvent::new(new_object_id(3), 0).into()))),
+            state,
+        )
+        .await
+        .expect("Error creating DisplayImpl.");
         let result: Vec<_> = recv.take(2).collect().await;
 
         assert_eq!(
             result,
             vec![
-                Wayland(GetRegistryRequest::new(new_object_id(1), new_object_id(2)).into()),
-                Wayland(SyncRequest::new(new_object_id(1), new_object_id(3)).into()),
+                WR(GetRegistryRequest::new(new_object_id(1), new_object_id(2)).into()),
+                WR(SyncRequest::new(new_object_id(1), new_object_id(3)).into()),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn display_impl_new_recvies_initial_events() {
+        use protocols::wayland::{wl_callback::DoneEvent, wl_registry::GlobalEvent};
+        use protocols::Events::Wayland;
+        let interface = CString::new("wl_compositor").expect("Can't create interface name");
+        let state = StubState::default();
+        let recv = stream::iter(
+            vec![
+                Ok(Wayland(
+                    GlobalEvent::new(new_object_id(2), 1, interface, 1).into(),
+                )),
+                Ok(Wayland(DoneEvent::new(new_object_id(3), 0).into())),
+            ]
+            .into_iter(),
+        );
+
+        let result = DisplayImpl::new(sink::drain().sink_map_err(|_| StubError), recv, state).await;
+
+        assert!(result.is_ok());
     }
 }
