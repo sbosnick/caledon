@@ -22,6 +22,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 pub mod client;
 pub mod core;
 
+mod registry;
+
 /// The generated types for the [Wayland] protocol XML files.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
