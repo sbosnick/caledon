@@ -10,7 +10,7 @@
 //!
 //! [Wayland]: https://wayland.freedesktop.org/
 
-use std::{error, fmt, marker::PhantomData, sync::Arc};
+use std::{error, fmt, iter::FromIterator, marker::PhantomData, sync::Arc};
 
 use futures_core::Stream;
 use futures_sink::Sink;
@@ -19,13 +19,14 @@ use snafu::{IntoError, ResultExt, Snafu};
 
 use crate::{
     core::{
-        make_wire_protocol, ClientRole, ObjectId, WaylandState, WireError, WireRecv, WireSend,
-        WireState,
+        make_wire_protocol, ClientRole, Message, ObjectId, WaylandState, WireError, WireRecv,
+        WireSend, WireState,
     },
     protocols::{
         self,
         wayland::{WlCallback, WlDisplay, WlRegistry},
     },
+    registry::{Global, Registry},
     IoChannel,
 };
 
@@ -94,6 +95,7 @@ impl fmt::Display for ClientPhase {
 }
 
 struct DisplayImpl<Si, St, WS, E> {
+    registry: Registry,
     _phantom: PhantomData<(Si, St, WS, E)>,
 }
 
@@ -125,20 +127,22 @@ where
         .context(Transport { phase })?;
         send.flush().await.context(Transport { phase })?;
 
-        let _globals = (&mut recv)
+        let globals = (&mut recv)
             .try_take_while(|item| future::ok(!is_done(item)))
             .map_err(|e| Transport { phase }.into_error(e))
             .try_fold(Vec::new(), |mut g, i| {
-                if is_global(&i) {
-                    g.push(i);
-                    future::ok(g)
-                } else {
-                    future::err(Protocol { phase }.build())
-                }
+                extract_global(&i).map_or_else(
+                    || future::err(Protocol { phase }.build()),
+                    |global| {
+                        g.push(global);
+                        future::ok(g)
+                    },
+                )
             })
             .await?;
 
         Ok(Self {
+            registry: Registry::from_iter(globals),
             _phantom: PhantomData,
         })
     }
@@ -187,18 +191,6 @@ where
     }
 }
 
-fn is_global(event: &protocols::Events) -> bool {
-    use protocols::wayland::wl_registry::Events::Global;
-    use protocols::wayland::Events::WlRegistry;
-    use protocols::Events::Wayland;
-
-    if let Wayland(WlRegistry(Global(_))) = event {
-        true
-    } else {
-        false
-    }
-}
-
 fn is_done(event: &protocols::Events) -> bool {
     use protocols::wayland::wl_callback::Events::Done;
     use protocols::wayland::Events::WlCallback;
@@ -208,6 +200,19 @@ fn is_done(event: &protocols::Events) -> bool {
         true
     } else {
         false
+    }
+}
+
+fn extract_global(event: &protocols::Events) -> Option<(u32, Global)> {
+    use protocols::wayland::wl_registry::Events::Global as RegGlobal;
+    use protocols::wayland::Events::WlRegistry;
+    use protocols::Events::Wayland;
+
+    if let Wayland(WlRegistry(RegGlobal(g))) = event {
+        let (name, interface, version) = g.args();
+        Some((*name, Global::new(interface.clone(), *version)))
+    } else {
+        None
     }
 }
 
