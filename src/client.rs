@@ -95,6 +95,8 @@ impl fmt::Display for ClientPhase {
 }
 
 struct DisplayImpl<Si, St, WS, E> {
+    // TODO: remove this when it is no longer needed
+    #[allow(dead_code)]
     registry: Registry,
     _phantom: PhantomData<(Si, St, WS, E)>,
 }
@@ -107,24 +109,16 @@ where
     E: error::Error + 'static,
 {
     async fn new(mut send: Si, mut recv: St, state: WS) -> Result<Self, ClientErrorImpl<E>> {
-        use protocols::Requests::Wayland as WR;
         let phase = ClientPhase::InitialHandshake;
 
         let display = create_object(&state, |id| WlDisplay::new(id))?;
         let registry = create_object(&state, |id| WlRegistry::new(id))?;
+        let r_id = get_core_obj_id(&registry);
         let callback = create_object(&state, |id| WlCallback::new(id))?;
+        let c_id = get_core_obj_id(&callback);
 
-        send.feed(WR(call_display(&display, |d| {
-            d.get_registry_request(get_core_obj_id(&registry))
-        })
-        .into()))
-            .await
-            .context(Transport { phase })?;
-        send.feed(WR(call_display(&display, |d| {
-            d.sync_request(get_core_obj_id(&callback)).into()
-        })))
-        .await
-        .context(Transport { phase })?;
+        send_display(&mut send, &display, phase, |d| d.get_registry_request(r_id)).await?;
+        send_display(&mut send, &display, phase, |d| d.sync_request(c_id)).await?;
         send.flush().await.context(Transport { phase })?;
 
         let globals = (&mut recv)
@@ -175,6 +169,25 @@ fn get_core_obj_id(object: &protocols::Protocols) -> ObjectId {
         Wayland(WlCallback(obj)) => obj.id(),
         _ => panic!("get_core_obj_id called on a non-core object"),
     }
+}
+
+async fn send_display<S, F, R, E>(
+    sink: &mut S,
+    display: &protocols::Protocols,
+    phase: ClientPhase,
+    f: F,
+) -> Result<(), ClientErrorImpl<E>>
+where
+    S: Sink<protocols::Requests, Error = E> + Unpin,
+    F: Fn(&protocols::wayland::WlDisplay) -> R,
+    R: Into<protocols::wayland::Requests>,
+    E: error::Error + 'static,
+{
+    use protocols::Requests::Wayland as WR;
+
+    sink.feed(WR(call_display(display, f).into()))
+        .await
+        .context(Transport { phase })
 }
 
 // TODO: find a better way of doing this
