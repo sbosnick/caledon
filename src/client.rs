@@ -10,7 +10,7 @@
 //!
 //! [Wayland]: https://wayland.freedesktop.org/
 
-use std::{error, fmt, iter::FromIterator, marker::PhantomData, sync::Arc};
+use std::{convert::TryInto, error, fmt, iter::FromIterator, marker::PhantomData, sync::Arc};
 
 use futures_core::Stream;
 use futures_sink::Sink;
@@ -174,23 +174,18 @@ where
 {
     use protocols::Requests::Wayland as WR;
 
-    sink.feed(WR(call_display(display, f).into()))
+    sink.feed(WR(f(get_display(display)).into()))
         .await
         .context(Transport { phase })
 }
 
-// TODO: find a better way of doing this
-fn call_display<F, R>(object: &protocols::Protocols, f: F) -> R
-where
-    F: Fn(&protocols::wayland::WlDisplay) -> R,
-{
-    use protocols::wayland::Protocol::WlDisplay;
-    use protocols::Protocols::Wayland;
+fn get_display(display: &protocols::Protocols) -> &protocols::wayland::WlDisplay {
+    use protocols::wayland::Protocol;
 
-    match object {
-        Wayland(WlDisplay(obj)) => f(obj),
-        _ => panic!("call_display called on a non-display object"),
-    }
+    display
+        .try_into()
+        .and_then(|w: &Protocol| w.try_into())
+        .expect("get_display called on non-display object")
 }
 
 fn is_done(event: &protocols::Events) -> bool {

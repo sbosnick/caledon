@@ -93,6 +93,18 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
                 }
             }
 
+            impl<'a> TryFrom<&'a super::Protocols> for &'a Protocol {
+                type Error = crate::core::ConversionError;
+
+                fn try_from(p: &'a super::Protocols) -> Result<Self, Self::Error> {
+                    #[allow(unreachable_patterns)]
+                    match p {
+                        super::Protocols::#enum_entry_ident(inner) => Ok(inner),
+                        _ => Err(crate::core::ConversionError::protocol()),
+                    }
+                }
+            }
+
             impl ProtocolMessageList for Requests {
                 type Protocol = Protocol;
             }

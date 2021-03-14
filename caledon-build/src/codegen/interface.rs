@@ -123,6 +123,18 @@ fn generate_interface_struct(
                 }
             }
         }
+
+        impl<'a> TryFrom<&'a Protocol> for &'a #interface_ident {
+            type Error = crate::core::ConversionError;
+
+            fn try_from(i: &'a Protocol) -> Result<Self, Self::Error> {
+                #[allow(unreachable_patterns)]
+                match i {
+                    Protocol::#enum_entry_ident(inner) => Ok(inner),
+                    _ => Err(crate::core::ConversionError::interface()),
+                }
+            }
+        }
     }
 }
 
