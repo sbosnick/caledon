@@ -25,6 +25,7 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
     let protocol_requests_doc = format!("The requests for the {} protocol.", protocol.name());
     let protocol_events_doc = format!("The events for the {} protocol.", protocol.name());
     let entries = protocol.interfaces().map(generate_interface_entry);
+    let id_entries = protocol.interfaces().map(Interface::enum_entry_ident);
     let request_entries = protocol.interfaces().map(generate_protocol_request_entry);
     let event_entries = protocol.interfaces().map(generate_protocol_event_entry);
     let interfaces = protocol.interfaces().map(|i| generate_interface(i));
@@ -66,6 +67,12 @@ pub(super) fn generate_protocol(protocol: &Protocol) -> TokenStream {
                 type Events = Events;
 
                 type ProtocolFamily = super::Protocols;
+
+                fn id(&self) -> ObjectId {
+                    match self {
+                        #(Protocol::#id_entries(obj) => obj.id()),*
+                    }
+                }
             }
 
             impl From<Protocol> for super::Protocols {

@@ -89,11 +89,6 @@ fn generate_interface_struct(
                 Self { id }
             }
 
-            #[doc = "Get the object id for this protocol object."]
-            pub fn id(&self) -> ObjectId {
-                self.id
-            }
-
             #(#request_factories)*
 
             #(#event_factories)*
@@ -102,7 +97,13 @@ fn generate_interface_struct(
         impl Interface for #interface_ident {
             type Requests = #mod_ident::Requests;
             type Events = #mod_ident::Events;
-            type Protocol = Protocol;
+
+            #[doc = "Get the object id for this protocol object."]
+            fn id(&self) -> ObjectId {
+                self.id
+            }
+
+           type Protocol = Protocol;
         }
 
         impl From<#interface_ident> for Protocol {

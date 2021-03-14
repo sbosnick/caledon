@@ -53,7 +53,10 @@ where
     let modules = protocols.map(generate_protocol);
 
     let output = quote! {
-        use crate::core::{Interface, FromOpcodeError, MessageHandler, MessageList, MessageMaker, OpCode, ProtocolFamily, ProtocolFamilyMessageList};
+        use crate::core::{
+            Interface, FromOpcodeError, MessageHandler, MessageList, MessageMaker,
+            ObjectId, OpCode, Protocol, ProtocolFamily, ProtocolFamilyMessageList
+        };
 
         #protocol_family
 
@@ -76,6 +79,7 @@ where
     I: Iterator<Item = &'a Protocol> + Clone + 'a,
 {
     let entries = protocols.clone().map(generate_protocol_list_entry);
+    let id_entries = protocols.clone().map(|p| p.enum_entry_ident());
     let request_has_fd_entries = generate_has_fd_entries(protocols.clone(), requests_ident.clone());
     let event_has_fd_entries = generate_has_fd_entries(protocols.clone(), events_ident.clone());
     let make_request_message_entries =
@@ -121,6 +125,12 @@ where
                 {
                     match self {
                         #(#make_event_message_entries)*
+                    }
+                }
+
+                fn id(&self) -> ObjectId {
+                    match self {
+                        #(Protocols::#id_entries(obj) => obj.id()),*
                     }
                 }
             }

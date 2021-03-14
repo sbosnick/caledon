@@ -19,8 +19,8 @@ use snafu::{IntoError, ResultExt, Snafu};
 
 use crate::{
     core::{
-        make_wire_protocol, ClientRole, Message, ObjectId, WaylandState, WireError, WireRecv,
-        WireSend, WireState,
+        make_wire_protocol, ClientRole, Message, ObjectId, ProtocolFamily, WaylandState, WireError,
+        WireRecv, WireSend, WireState,
     },
     protocols::{
         self,
@@ -113,9 +113,9 @@ where
 
         let display = create_object(&state, |id| WlDisplay::new(id))?;
         let registry = create_object(&state, |id| WlRegistry::new(id))?;
-        let r_id = get_core_obj_id(&registry);
+        let r_id = registry.id();
         let callback = create_object(&state, |id| WlCallback::new(id))?;
-        let c_id = get_core_obj_id(&callback);
+        let c_id = callback.id();
 
         send_display(&mut send, &display, phase, |d| d.get_registry_request(r_id)).await?;
         send_display(&mut send, &display, phase, |d| d.sync_request(c_id)).await?;
@@ -158,17 +158,6 @@ where
     state
         .create_object(|id| Wayland(f(id).into()))
         .context(Transport { phase })
-}
-
-fn get_core_obj_id(object: &protocols::Protocols) -> ObjectId {
-    use protocols::wayland::Protocol::{WlCallback, WlDisplay, WlRegistry};
-    use protocols::Protocols::Wayland;
-    match object {
-        Wayland(WlDisplay(obj)) => obj.id(),
-        Wayland(WlRegistry(obj)) => obj.id(),
-        Wayland(WlCallback(obj)) => obj.id(),
-        _ => panic!("get_core_obj_id called on a non-core object"),
-    }
 }
 
 async fn send_display<S, F, R, E>(

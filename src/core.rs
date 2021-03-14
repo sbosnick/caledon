@@ -200,6 +200,9 @@ pub trait Interface: Sized {
 
     /// The protocol to which this interface belongs.
     type Protocol: Protocol + From<Self> + TryInto<Self>;
+
+    /// Get the object id for the protocol object implementing this `Interface`.
+    fn id(&self) -> ObjectId;
 }
 
 /// A collection of [Wayland] messages associated with a particular protocol.
@@ -233,6 +236,9 @@ pub trait Protocol: Sized {
 
     /// The protocol family to which this protocol belongs.
     type ProtocolFamily: ProtocolFamily + From<Self> + TryInto<Self>;
+
+    /// Get the object id for the protocol object reprsented by this instance.
+    fn id(&self) -> ObjectId;
 }
 
 /// A collection of [Wayland] messages associated with a `ProtocolFamily`.
@@ -295,6 +301,9 @@ pub trait ProtocolFamily {
         _opcode: OpCode,
         _msg: MM,
     ) -> Result<Self::Events, FromOpcodeError<MM::Error>>;
+
+    /// Get the object id for the protocol object reprsented by this instance.
+    fn id(&self) -> ObjectId;
 }
 
 // === type alaises and utility traits ===

@@ -221,6 +221,10 @@ impl Interface for FdPasser {
     type Requests = Requests;
     type Events = Events;
     type Protocol = BuildTimeWaylandTests;
+
+    fn id(&self) -> ObjectId {
+        ObjectId(0)
+    }
 }
 
 pub enum BuildTimeWaylandTests {
@@ -254,6 +258,10 @@ impl Protocol for BuildTimeWaylandTests {
     type Events = BuildTimeWaylandTestsEvents;
 
     type ProtocolFamily = Protocols;
+
+    fn id(&self) -> ObjectId {
+        ObjectId(0)
+    }
 }
 impl ProtocolMessageList for BuildTimeWaylandTestsRequest {
     type Protocol = BuildTimeWaylandTests;
@@ -320,6 +328,11 @@ impl ProtocolFamily for Protocols {
                 })
             }
         }
+    }
+
+    fn id(&self) -> ObjectId {
+        // TODO: remove this once the code generation is in place
+        ObjectId(0)
     }
 }
 impl From<BuildTimeWaylandTests> for Protocols {
