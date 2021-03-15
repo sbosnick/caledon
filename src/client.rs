@@ -112,13 +112,14 @@ where
         let phase = ClientPhase::InitialHandshake;
 
         let display = create_object(&state, |id| WlDisplay::new(id))?;
+        let d = get_display(&display);
         let registry = create_object(&state, |id| WlRegistry::new(id))?;
         let r_id = registry.id();
         let callback = create_object(&state, |id| WlCallback::new(id))?;
         let c_id = callback.id();
 
-        send_display(&mut send, &display, phase, |d| d.get_registry_request(r_id)).await?;
-        send_display(&mut send, &display, phase, |d| d.sync_request(c_id)).await?;
+        feed_wayland(&mut send, d.get_registry_request(r_id).into(), phase).await?;
+        feed_wayland(&mut send, d.sync_request(c_id).into(), phase).await?;
         send.flush().await.context(Transport { phase })?;
 
         let globals = (&mut recv)
@@ -160,21 +161,18 @@ where
         .context(Transport { phase })
 }
 
-async fn send_display<S, F, R, E>(
+async fn feed_wayland<S, E>(
     sink: &mut S,
-    display: &protocols::Protocols,
+    request: protocols::wayland::Requests,
     phase: ClientPhase,
-    f: F,
 ) -> Result<(), ClientErrorImpl<E>>
 where
     S: Sink<protocols::Requests, Error = E> + Unpin,
-    F: Fn(&protocols::wayland::WlDisplay) -> R,
-    R: Into<protocols::wayland::Requests>,
     E: error::Error + 'static,
 {
-    use protocols::Requests::Wayland as WR;
+    use protocols::Requests::Wayland;
 
-    sink.feed(WR(f(get_display(display)).into()))
+    sink.feed(Wayland(request))
         .await
         .context(Transport { phase })
 }
