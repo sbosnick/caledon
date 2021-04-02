@@ -27,6 +27,13 @@ at your option.
 
 ## Contribution
 
+If you would like to contribute to this project I ask that you start by filing
+an issue. Currently the project is not well set up to co-ordinate contribution
+from multiple people (it is a personal proof-of-concept right now). I am
+interested in contribution from other people. If others are interested in
+contributing I would make it a priority to transition the project to a state
+where it can co-ordinate multiple contributors.
+
 Please note that this project is released with a [Contributor Code of
 Conduct][code-of-conduct].  By participating in this project you agree to abide
 by its terms.
