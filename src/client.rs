@@ -27,7 +27,7 @@ use crate::{
         self,
         wayland::{WlCallback, WlDisplay, WlRegistry},
     },
-    registry::{Global, Registry},
+    registry::{Global, GlobalKv, Registry},
     IoChannel,
 };
 
@@ -118,11 +118,11 @@ where
     async fn new(mut send: Si, mut recv: St, state: WS) -> Result<Self, ClientErrorImpl<E>> {
         let phase = ClientPhase::InitialHandshake;
 
-        let display = create_object(&state, |id| WlDisplay::new(id))?;
+        let display = create_object(&state, WlDisplay::new)?;
         let d = get_display(&display);
-        let registry = create_object(&state, |id| WlRegistry::new(id))?;
+        let registry = create_object(&state, WlRegistry::new)?;
         let r_id = registry.id();
-        let callback = create_object(&state, |id| WlCallback::new(id))?;
+        let callback = create_object(&state, WlCallback::new)?;
         let c_id = callback.id();
 
         feed_wayland(&mut send, d.get_registry_request(r_id).into(), phase).await?;
@@ -216,11 +216,7 @@ fn is_done(event: &protocols::Events) -> bool {
     use protocols::wayland::Events::WlCallback;
     use protocols::Events::Wayland;
 
-    if let Wayland(WlCallback(Done(_))) = event {
-        true
-    } else {
-        false
-    }
+    matches!(event, Wayland(WlCallback(Done(_))))
 }
 
 fn extract_global(event: &protocols::Events) -> Option<(u32, Global)> {
@@ -236,7 +232,7 @@ fn extract_global(event: &protocols::Events) -> Option<(u32, Global)> {
     }
 }
 
-fn handshake_error<E>() -> future::Ready<Result<Vec<(u32, Global)>, ClientErrorImpl<E>>>
+fn handshake_error<E>() -> future::Ready<Result<Vec<GlobalKv>, ClientErrorImpl<E>>>
 where
     E: error::Error + 'static,
 {

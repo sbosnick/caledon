@@ -44,6 +44,8 @@ pub(crate) struct Global {
     version: u32,
 }
 
+pub(crate) type GlobalKv = (u32, Global);
+
 /// A change indicator for the [`Registry`] from which the change notification arises.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum GlobalChange {
@@ -164,7 +166,7 @@ impl FromIterator<Global> for Registry {
     }
 }
 
-impl FromIterator<(u32, Global)> for Registry {
+impl FromIterator<GlobalKv> for Registry {
     fn from_iter<T: IntoIterator<Item = (u32, Global)>>(iter: T) -> Self {
         Registry {
             shared: Arc::new(Shared {
