@@ -55,7 +55,7 @@ pub trait Argument: private::ArgumentBase {}
 /// An object or new_id `Argument` for the [Wayland] wire protocol.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 pub struct ObjectId(u32);
 
 /// A fixed decimal `Argument` for the [Wayland] wire protocol.

@@ -10,7 +10,14 @@
 //!
 //! [Wayland]: https://wayland.freedesktop.org/
 
-use std::{convert::TryInto, error, fmt, iter::FromIterator, marker::PhantomData, sync::Arc};
+use std::{
+    convert::TryInto,
+    error, fmt,
+    iter::FromIterator,
+    marker::PhantomData,
+    ops::DerefMut,
+    sync::{Arc, Mutex},
+};
 
 use crossbeam::atomic::AtomicCell;
 use futures_core::Stream;
@@ -30,6 +37,10 @@ use crate::{
     registry::{Global, GlobalKv, Registry},
     IoChannel,
 };
+
+use self::callbacks::{Callbacks, UnknownCallbackError};
+
+mod callbacks;
 
 /// The core client-side object to access a [Wayland] server.
 ///
@@ -64,6 +75,14 @@ where
     pub async fn dispatch(&self) -> Result<(), ClientError> {
         Ok(self.inner.dispatch().await?)
     }
+
+    /// Asynchronous roundtrip using a SyncRequest/DoneEvent pair.
+    ///
+    /// This method resolves when the DoneEvent is dispatched and resolves
+    /// to the the DoneEvent's callback_data which is the event serial.
+    pub async fn sync(&self) -> Result<u32, ClientError> {
+        Ok(self.inner.sync().await?)
+    }
 }
 
 /// The possible errors arising in the core client-side [Wayland] objects.
@@ -82,12 +101,19 @@ enum ClientErrorImpl<E: error::Error + 'static> {
 
     #[snafu(display("Attempt to dispatch the Display a second time."))]
     MultiDispach,
+
+    #[snafu(display("Attempt to act on an unknown object during the {}.", phase))]
+    UnknownObject {
+        source: UnknownCallbackError,
+        phase: ClientPhase,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
 enum ClientPhase {
     InitialHandshake,
     Dispatch,
+    SendRequest,
 }
 
 impl fmt::Display for ClientPhase {
@@ -96,6 +122,7 @@ impl fmt::Display for ClientPhase {
         match self {
             InitialHandshake => write!(f, "initial handshake"),
             Dispatch => write!(f, "dipatch phase"),
+            SendRequest => write!(f, "send request phase"),
         }
     }
 }
@@ -104,8 +131,12 @@ struct DisplayImpl<Si, St, WS, E> {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
     registry: Registry,
+    callbacks: Callbacks,
     recv: AtomicCell<Option<St>>,
-    _phantom: PhantomData<(Si, WS, E)>,
+    state: WS,
+    send: Mutex<Si>,
+    display: Arc<protocols::Protocols>,
+    _phantom: PhantomData<(Si, E)>,
 }
 
 impl<Si, St, WS, E> DisplayImpl<Si, St, WS, E>
@@ -143,13 +174,21 @@ where
         Ok(Self {
             registry: Registry::from_iter(globals),
             recv: AtomicCell::new(Some(recv)),
+            callbacks: Callbacks::new(),
+            send: Mutex::new(send),
+            state,
+            display,
             _phantom: PhantomData,
         })
     }
 
     async fn dispatch(&self) -> Result<(), ClientErrorImpl<E>> {
         use protocols::{
-            wayland::{wl_display::Events::Error as WlError, Events::WlDisplay},
+            wayland::{
+                wl_callback::Events::Done,
+                wl_display::Events::Error as WlError,
+                Events::{WlCallback, WlDisplay},
+            },
             Events::Wayland,
         };
         let phase = ClientPhase::Dispatch;
@@ -162,9 +201,36 @@ where
                     let message = m.to_string_lossy();
                     future::err(Protocol { phase, message }.build())
                 }
+                Wayland(WlCallback(Done(d))) => {
+                    let (r,) = d.args();
+                    future::ready(
+                        self.callbacks
+                            .resolve(d.sender(), *r)
+                            .context(UnknownObject { phase }),
+                    )
+                }
                 _ => future::ok(()),
             })
             .await
+    }
+
+    async fn sync(&self) -> Result<u32, ClientErrorImpl<E>> {
+        let phase = ClientPhase::SendRequest;
+        let callback = create_object(&self.state, WlCallback::new)?.id();
+        let recv = self.callbacks.add(callback);
+        let mut send = self.send.lock().unwrap();
+        let d = get_display(&self.display);
+
+        feed_wayland(send.deref_mut(), d.sync_request(callback).into(), phase).await?;
+        send.flush().await.context(Transport { phase })?;
+
+        recv.await.map_err(|_| {
+            Protocol {
+                phase,
+                message: "callback resolved prematurely",
+            }
+            .build()
+        })
     }
 }
 
@@ -305,24 +371,55 @@ mod tests {
         StubError,
     >;
 
+    type FullDisplay = DisplayImpl<
+        mpsc::Sender<Result<protocols::Requests, StubError>>,
+        mpsc::Receiver<Result<protocols::Events, StubError>>,
+        StubState,
+        StubError,
+    >;
+
     async fn new_dispatch_display_impl() -> (
         DispatchDisplay,
         mpsc::Sender<Result<protocols::Events, StubError>>,
     ) {
         use protocols::{wayland::wl_callback::DoneEvent, Events::Wayland};
 
-        let (mut sender, receivor) = mpsc::channel(100);
+        let (mut sender, receiver) = mpsc::channel(100);
         let drain: DrainSink = sink::drain().sink_err_into();
         sender
             .send(Ok(Wayland(DoneEvent::new(new_object_id(3), 0).into())))
             .await
             .expect("Can't send DoneEvent");
 
-        let display = DisplayImpl::new(drain, receivor, Default::default())
+        let display = DisplayImpl::new(drain, receiver, Default::default())
             .await
             .expect("Can't create DisplayImpl");
 
         (display, sender)
+    }
+
+    async fn new_full_display_impl() -> (
+        FullDisplay,
+        mpsc::Sender<Result<protocols::Events, StubError>>,
+        mpsc::Receiver<Result<protocols::Requests, StubError>>,
+    ) {
+        use protocols::{wayland::wl_callback::DoneEvent, Events::Wayland};
+
+        let (sender, stream) = mpsc::channel(100);
+        let (sink, receiver) = mpsc::channel(100);
+
+        sender
+            .send(Ok(Wayland(DoneEvent::new(new_object_id(3), 0).into())))
+            .await
+            .expect("Can't send DoneEvent");
+
+        let display = DisplayImpl::new(sink, stream, Default::default())
+            .await
+            .expect("Can't create DisplayImpl");
+
+        // TODO: peel off the GetRegistryRequest from receiver
+
+        (display, sender, receiver)
     }
 
     #[tokio::test]
@@ -407,5 +504,12 @@ mod tests {
         let result = sut.dispatch().await;
 
         assert_matches!(result, Err(ClientErrorImpl::<StubError>::Protocol { .. }));
+    }
+
+    #[tokio::test]
+    async fn display_impl_sync_awaits_done_event() {
+        //let (sut, mut send) = new_dispatch_display_impl().await;
+        //let sync = sut.sync();
+        //let id = sut.callbacks.
     }
 }
