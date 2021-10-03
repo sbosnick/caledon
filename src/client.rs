@@ -46,8 +46,6 @@ mod callbacks;
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub struct Display<T> {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     inner: Arc<DisplayImpl<ClientSend<T>, ClientRecv<T>, ClientState, WireError>>,
 }
 
