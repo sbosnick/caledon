@@ -32,7 +32,8 @@ pub struct Protocol {
     path: PathBuf,
 
     name: String,
-    copyright: Option<Copyright>,
+    #[serde(rename = "copyright")]
+    _copyright: Option<Copyright>,
     description: Option<Description>,
     #[serde(rename = "interface")]
     interfaces: Vec<Interface>,
@@ -42,7 +43,7 @@ pub struct Protocol {
 #[derive(Debug, Deserialize)]
 pub struct Copyright {
     #[serde(rename = "$value")]
-    body: String,
+    _body: String,
 }
 
 // <!ELEMENT interface (description?,(request|event|enum)+)>
@@ -51,7 +52,8 @@ pub struct Copyright {
 #[derive(Debug, Deserialize)]
 pub struct Interface {
     name: String,
-    version: String,
+    #[serde(rename = "version")]
+    _version: String,
     #[serde(rename = "$value")]
     items: Vec<InterfaceItem>,
 }
@@ -79,8 +81,9 @@ pub enum InterfaceItem {
 pub struct Request {
     name: String,
     #[serde(rename = "type")]
-    type_name: Option<String>,
-    since: Option<String>,
+    _type_name: Option<String>,
+    #[serde(rename = "since")]
+    _since: Option<String>,
     description: Option<Description>,
     #[serde(rename = "arg")]
     args: Option<Vec<Arg>>,
@@ -92,7 +95,8 @@ pub struct Request {
 #[derive(Debug, Deserialize)]
 pub struct Event {
     name: String,
-    since: Option<String>,
+    #[serde(rename = "since")]
+    _since: Option<String>,
     description: Option<Description>,
     #[serde(rename = "arg")]
     args: Option<Vec<Arg>>,
@@ -103,6 +107,8 @@ pub struct Event {
 //   <!ATTLIST enum since CDATA #IMPLIED>
 //   <!ATTLIST enum bitfield CDATA #IMPLIED>
 #[derive(Debug, Deserialize)]
+// Enum is not yet used by code generation. Remove this onced it is.
+#[allow(dead_code)]
 pub struct Enum {
     name: String,
     since: Option<String>,
@@ -118,6 +124,8 @@ pub struct Enum {
 //   <!ATTLIST entry summary CDATA #IMPLIED>
 //   <!ATTLIST entry since CDATA #IMPLIED>
 #[derive(Debug, Deserialize)]
+// Entry is not yet used by code generation. Remove this onced it is.
+#[allow(dead_code)]
 pub struct Entry {
     name: String,
     value: String,
@@ -139,11 +147,14 @@ pub struct Arg {
     #[serde(rename = "type")]
     type_name: String,
     summary: Option<String>,
-    interface: Option<String>,
-    allow_null: Option<String>,
+    #[serde(rename = "interface")]
+    _interface: Option<String>,
+    #[serde(rename = "allow_null")]
+    _allow_null: Option<String>,
     #[serde(rename = "enum")]
-    enum_name: Option<String>,
-    description: Option<Description>,
+    _enum_name: Option<String>,
+    #[serde(rename = "description")]
+    _description: Option<Description>,
 }
 
 // <!ELEMENT description (#PCDATA)>
@@ -394,14 +405,6 @@ mod tests {
         let protocol = from_str::<Protocol>(TEST_XML_PROTOCOL).unwrap();
 
         assert_eq!(protocol.name, "build_time_wayland_tests");
-    }
-
-    #[test]
-    fn protocol_has_copyright_no_description() {
-        let protocol = from_str::<Protocol>(TEST_XML_PROTOCOL).unwrap();
-
-        assert!(protocol.copyright.is_some());
-        assert!(protocol.description.is_none());
     }
 
     #[test]
