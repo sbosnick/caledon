@@ -51,8 +51,10 @@ impl Callbacks {
 
     pub fn resolve(&self, id: ObjectId, result: u32) -> Result<(), UnknownCallbackError> {
         let mut state = self.shared.state.lock().unwrap();
-        let sender = /*match*/ state.map.remove(&id)
-            .context(UnknownCallbackContext{id})?;
+        let sender = state
+            .map
+            .remove(&id)
+            .context(UnknownCallbackContext { id })?;
 
         // If the send is Err that means that Receiver was dropped which
         // we treat as not being an error.
