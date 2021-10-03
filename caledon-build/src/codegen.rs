@@ -145,7 +145,7 @@ where
     generate_pf_message_list(
         protocols,
         ident,
-        &"requests",
+        "requests",
         generate_family_request_entry,
         |i| i.requests(),
     )
@@ -158,7 +158,7 @@ where
     generate_pf_message_list(
         protocols,
         ident,
-        &"events",
+        "events",
         generate_family_event_entry,
         |i| i.events(),
     )

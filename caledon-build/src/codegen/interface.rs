@@ -71,10 +71,10 @@ fn generate_interface_struct(
     let new_doc = format!("Create a new {}.", interface_ident);
     let request_factories = interface
         .requests()
-        .map(|r| generate_request_factory(r, &mod_ident));
+        .map(|r| generate_request_factory(r, mod_ident));
     let event_factories = interface
         .events()
-        .map(|e| generate_event_factory(e, &mod_ident));
+        .map(|e| generate_event_factory(e, mod_ident));
 
     quote! {
         #[doc = #interface_doc]

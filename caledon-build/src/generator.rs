@@ -244,7 +244,7 @@ where
                 |s| f(&Path::new(&s).join(suffix)),
             )
         },
-        |p| f(&p),
+        |p| f(p),
     )
 }
 
