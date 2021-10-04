@@ -16,7 +16,7 @@ use std::{
     iter::FromIterator,
     marker::PhantomData,
     ops::DerefMut,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use crossbeam::atomic::AtomicCell;
@@ -24,6 +24,7 @@ use futures_core::Stream;
 use futures_sink::Sink;
 use futures_util::{future, sink::SinkExt, stream::TryStreamExt};
 use snafu::{IntoError, OptionExt, ResultExt, Snafu};
+use tokio::sync::Mutex;
 
 use crate::{
     core::{
@@ -216,7 +217,7 @@ where
         let phase = ClientPhase::SendRequest;
         let callback = create_object(&self.state, WlCallback::new)?.id();
         let recv = self.callbacks.add(callback);
-        let mut send = self.send.lock().unwrap();
+        let mut send = self.send.lock().await;
         let d = get_display(&self.display);
 
         feed_wayland(send.deref_mut(), d.sync_request(callback).into(), phase).await?;
@@ -461,8 +462,8 @@ mod tests {
     >;
 
     impl<F> FakeDisplay<F> {
-        fn close_inner_sink_channel(&self) {
-            let mut send = self.send.lock().unwrap();
+        async fn close_inner_sink_channel(&self) {
+            let mut send = self.send.lock().await;
             send.sender.close_channel();
         }
     }
@@ -587,7 +588,7 @@ mod tests {
         let sut = Arc::new(new_fake_display_impl(move |req| do_done_callback(req, serial)).await);
         let handle = spawn(sut.clone().dispatch());
         let result = sut.sync().await;
-        sut.close_inner_sink_channel();
+        sut.close_inner_sink_channel().await;
         handle
             .await
             .expect("Disptcher panicked")
