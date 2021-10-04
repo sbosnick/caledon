@@ -10,13 +10,16 @@
 //!
 //! [Wayland]: https://wayland.freedesktop.org/
 
-use std::{convert::TryInto, error, fmt, iter::FromIterator, marker::PhantomData, sync::Arc};
+use std::{
+    convert::TryInto, error, fmt, iter::FromIterator, marker::PhantomData, ops::DerefMut, sync::Arc,
+};
 
 use crossbeam::atomic::AtomicCell;
 use futures_core::Stream;
 use futures_sink::Sink;
 use futures_util::{future, sink::SinkExt, stream::TryStreamExt};
 use snafu::{IntoError, OptionExt, ResultExt, Snafu};
+use tokio::sync::Mutex;
 
 use crate::{
     core::{
@@ -31,13 +34,15 @@ use crate::{
     IoChannel,
 };
 
+use self::callbacks::{Callbacks, UnknownCallbackError};
+
+mod callbacks;
+
 /// The core client-side object to access a [Wayland] server.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 pub struct Display<T> {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
-    inner: DisplayImpl<ClientSend<T>, ClientRecv<T>, ClientState, WireError>,
+    inner: Arc<DisplayImpl<ClientSend<T>, ClientRecv<T>, ClientState, WireError>>,
 }
 
 type ClientSend<T> = WireSend<T, ClientRole, protocols::Protocols>;
@@ -53,7 +58,7 @@ where
         let (send, recv, state) = make_wire_protocol(channel);
 
         Ok(Display {
-            inner: DisplayImpl::new(send, recv, state).await?,
+            inner: Arc::new(DisplayImpl::new(send, recv, state).await?),
         })
     }
 
@@ -62,7 +67,15 @@ where
     /// This method resolves with either a fatal error on the channel or if the
     /// stream of event messages reaches the end.
     pub async fn dispatch(&self) -> Result<(), ClientError> {
-        Ok(self.inner.dispatch().await?)
+        Ok(self.inner.clone().dispatch().await?)
+    }
+
+    /// Asynchronous roundtrip using a SyncRequest/DoneEvent pair.
+    ///
+    /// This method resolves when the DoneEvent is dispatched and resolves
+    /// to the the DoneEvent's callback_data which is the event serial.
+    pub async fn sync(&self) -> Result<u32, ClientError> {
+        Ok(self.inner.sync().await?)
     }
 }
 
@@ -82,12 +95,19 @@ enum ClientErrorImpl<E: error::Error + 'static> {
 
     #[snafu(display("Attempt to dispatch the Display a second time."))]
     MultiDispach,
+
+    #[snafu(display("Attempt to act on an unknown object during the {}.", phase))]
+    UnknownObject {
+        source: UnknownCallbackError,
+        phase: ClientPhase,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
 enum ClientPhase {
     InitialHandshake,
     Dispatch,
+    SendRequest,
 }
 
 impl fmt::Display for ClientPhase {
@@ -96,6 +116,7 @@ impl fmt::Display for ClientPhase {
         match self {
             InitialHandshake => write!(f, "initial handshake"),
             Dispatch => write!(f, "dipatch phase"),
+            SendRequest => write!(f, "send request phase"),
         }
     }
 }
@@ -104,8 +125,12 @@ struct DisplayImpl<Si, St, WS, E> {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
     registry: Registry,
+    callbacks: Callbacks,
     recv: AtomicCell<Option<St>>,
-    _phantom: PhantomData<(Si, WS, E)>,
+    state: WS,
+    send: Mutex<Si>,
+    display: Arc<protocols::Protocols>,
+    _phantom: PhantomData<(Si, E)>,
 }
 
 impl<Si, St, WS, E> DisplayImpl<Si, St, WS, E>
@@ -143,13 +168,21 @@ where
         Ok(Self {
             registry: Registry::from_iter(globals),
             recv: AtomicCell::new(Some(recv)),
+            callbacks: Callbacks::new(),
+            send: Mutex::new(send),
+            state,
+            display,
             _phantom: PhantomData,
         })
     }
 
-    async fn dispatch(&self) -> Result<(), ClientErrorImpl<E>> {
+    async fn dispatch(self: Arc<Self>) -> Result<(), ClientErrorImpl<E>> {
         use protocols::{
-            wayland::{wl_display::Events::Error as WlError, Events::WlDisplay},
+            wayland::{
+                wl_callback::Events::Done,
+                wl_display::Events::Error as WlError,
+                Events::{WlCallback, WlDisplay},
+            },
             Events::Wayland,
         };
         let phase = ClientPhase::Dispatch;
@@ -162,9 +195,36 @@ where
                     let message = m.to_string_lossy();
                     future::err(Protocol { phase, message }.build())
                 }
+                Wayland(WlCallback(Done(d))) => {
+                    let (r,) = d.args();
+                    future::ready(
+                        self.callbacks
+                            .resolve(d.sender(), *r)
+                            .context(UnknownObject { phase }),
+                    )
+                }
                 _ => future::ok(()),
             })
             .await
+    }
+
+    async fn sync(&self) -> Result<u32, ClientErrorImpl<E>> {
+        let phase = ClientPhase::SendRequest;
+        let callback = create_object(&self.state, WlCallback::new)?.id();
+        let recv = self.callbacks.add(callback);
+        let mut send = self.send.lock().await;
+        let d = get_display(&self.display);
+
+        feed_wayland(send.deref_mut(), d.sync_request(callback).into(), phase).await?;
+        send.flush().await.context(Transport { phase })?;
+
+        recv.await.map_err(|_| {
+            Protocol {
+                phase,
+                message: "callback resolved prematurely",
+            }
+            .build()
+        })
     }
 }
 
@@ -249,14 +309,18 @@ where
 mod tests {
 
     use super::*;
+    use pin_project::pin_project;
+    use tokio::spawn;
 
     use std::{
         convert::Infallible,
         ffi::CString,
+        pin::Pin,
         sync::{
             atomic::{AtomicU32, Ordering},
             Arc,
         },
+        task,
     };
 
     use assert_matches::assert_matches;
@@ -273,12 +337,18 @@ mod tests {
         }
     }
 
+    impl From<mpsc::SendError> for StubError {
+        fn from(_: mpsc::SendError) -> Self {
+            Self
+        }
+    }
+
     #[derive(Default)]
-    struct StubState {
+    struct FakeState {
         next: AtomicU32,
     }
 
-    impl WaylandState<protocols::Protocols> for StubState {
+    impl WaylandState<protocols::Protocols> for FakeState {
         type Error = StubError;
 
         fn create_object(
@@ -301,7 +371,7 @@ mod tests {
     type DispatchDisplay = DisplayImpl<
         DrainSink,
         mpsc::Receiver<Result<protocols::Events, StubError>>,
-        StubState,
+        FakeState,
         StubError,
     >;
 
@@ -311,18 +381,98 @@ mod tests {
     ) {
         use protocols::{wayland::wl_callback::DoneEvent, Events::Wayland};
 
-        let (mut sender, receivor) = mpsc::channel(100);
+        let (mut sender, receiver) = mpsc::channel(100);
         let drain: DrainSink = sink::drain().sink_err_into();
         sender
             .send(Ok(Wayland(DoneEvent::new(new_object_id(3), 0).into())))
             .await
             .expect("Can't send DoneEvent");
 
-        let display = DisplayImpl::new(drain, receivor, Default::default())
+        let display = DisplayImpl::new(drain, receiver, Default::default())
             .await
             .expect("Can't create DisplayImpl");
 
         (display, sender)
+    }
+
+    type EventSender = mpsc::Sender<Result<protocols::Events, StubError>>;
+
+    #[pin_project]
+    struct FakeSink<F> {
+        #[pin]
+        sender: EventSender,
+        f: F,
+    }
+
+    impl<F: Fn(protocols::Requests) -> Option<protocols::Events>> FakeSink<F> {
+        fn new(sender: EventSender, f: F) -> Self {
+            Self { sender, f }
+        }
+    }
+
+    impl<F> Sink<protocols::Requests> for FakeSink<F>
+    where
+        F: Fn(protocols::Requests) -> Option<protocols::Events>,
+    {
+        type Error = StubError;
+
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+        ) -> task::Poll<Result<(), Self::Error>> {
+            let this = self.project();
+            this.sender.poll_ready(cx).map_err(|e| e.into())
+        }
+
+        fn start_send(self: Pin<&mut Self>, item: protocols::Requests) -> Result<(), Self::Error> {
+            let this = self.project();
+            match (this.f)(item) {
+                Some(event) => this.sender.start_send(Ok(event)).map_err(|e| e.into()),
+                None => Ok(()),
+            }
+        }
+
+        fn poll_flush(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+        ) -> task::Poll<Result<(), Self::Error>> {
+            let this = self.project();
+            this.sender.poll_flush(cx).map_err(|e| e.into())
+        }
+
+        fn poll_close(
+            self: Pin<&mut Self>,
+            cx: &mut task::Context<'_>,
+        ) -> task::Poll<Result<(), Self::Error>> {
+            let this = self.project();
+            this.sender.poll_close(cx).map_err(|e| e.into())
+        }
+    }
+
+    type FakeDisplay<F> = DisplayImpl<
+        FakeSink<F>,
+        mpsc::Receiver<Result<protocols::Events, StubError>>,
+        FakeState,
+        StubError,
+    >;
+
+    impl<F> FakeDisplay<F> {
+        async fn close_inner_sink_channel(&self) {
+            let mut send = self.send.lock().await;
+            send.sender.close_channel();
+        }
+    }
+
+    async fn new_fake_display_impl<F>(f: F) -> FakeDisplay<F>
+    where
+        F: Fn(protocols::Requests) -> Option<protocols::Events>,
+    {
+        let (sender, receiver) = mpsc::channel(100);
+        let sink = FakeSink::new(sender, f);
+
+        DisplayImpl::new(sink, receiver, Default::default())
+            .await
+            .expect("Can't create DisplayImpl")
     }
 
     #[tokio::test]
@@ -331,7 +481,7 @@ mod tests {
         use protocols::wayland::wl_display::{GetRegistryRequest, SyncRequest};
         use protocols::Events::Wayland as WE;
         use protocols::Requests::Wayland as WR;
-        let state = StubState::default();
+        let state = FakeState::default();
         let (send, recv) = mpsc::channel(10);
         let send = send.sink_map_err(|_| StubError);
 
@@ -358,7 +508,7 @@ mod tests {
         use protocols::wayland::{wl_callback::DoneEvent, wl_registry::GlobalEvent};
         use protocols::Events::Wayland;
         let interface = CString::new("wl_compositor").expect("Can't create interface name");
-        let state = StubState::default();
+        let state = FakeState::default();
         let recv = stream::iter(
             vec![
                 Ok(Wayland(
@@ -377,7 +527,8 @@ mod tests {
     #[tokio::test]
     async fn display_impl_multi_dispatch_is_error() {
         let (sut, _) = new_dispatch_display_impl().await;
-        let _ = sut.dispatch().await;
+        let sut = Arc::new(sut);
+        let _ = sut.clone().dispatch().await;
         let result = sut.dispatch().await;
 
         assert!(result.is_err())
@@ -386,6 +537,7 @@ mod tests {
     #[tokio::test]
     async fn display_impl_dipatch_error_is_transport_error() {
         let (sut, mut send) = new_dispatch_display_impl().await;
+        let sut = Arc::new(sut);
         send.send(Err(StubError))
             .await
             .expect("Can't send StubError");
@@ -402,10 +554,41 @@ mod tests {
         let event = Wayland(ErrorEvent::new(display_id, display_id, 0, message).into());
 
         let (sut, mut send) = new_dispatch_display_impl().await;
+        let sut = Arc::new(sut);
         send.send(Ok(event)).await.expect("Can't send ErrorEvent");
         send.close_channel();
         let result = sut.dispatch().await;
 
         assert_matches!(result, Err(ClientErrorImpl::<StubError>::Protocol { .. }));
+    }
+
+    fn do_done_callback(item: protocols::Requests, serial: u32) -> Option<protocols::Events> {
+        use protocols::wayland::Requests::WlDisplay;
+        use protocols::wayland::{wl_callback::DoneEvent, wl_display::Requests::Sync};
+        use protocols::{Events, Requests};
+
+        match item {
+            Requests::Wayland(WlDisplay(Sync(sync))) => {
+                let (id,) = sync.args();
+                Some(Events::Wayland(DoneEvent::new(*id, serial).into()))
+            }
+            _ => None,
+        }
+    }
+
+    #[tokio::test]
+    async fn display_impl_sync_awaits_done_event() {
+        let serial = 5;
+
+        let sut = Arc::new(new_fake_display_impl(move |req| do_done_callback(req, serial)).await);
+        let handle = spawn(sut.clone().dispatch());
+        let result = sut.sync().await;
+        sut.close_inner_sink_channel().await;
+        handle
+            .await
+            .expect("Disptcher panicked")
+            .expect("Dispatcher errored.");
+
+        assert_matches!(result, Ok(s) => assert_eq!(s, serial));
     }
 }

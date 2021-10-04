@@ -39,6 +39,12 @@ where
 // collision is unlikely to occur in practice. This "allow" can
 // most likely be removed once Iterator::intersperse has stabalized and
 // our MSRV has advanced enough to no longer need the Itertools version.
+//
+// As of Rust verson 1.56, Iterator::intersperse is stablaized. 1.56 is (as of
+// the date this gets committed) in beta. This leads to the call to
+// intersperse failing to compile because it is ambiguous. The direct call
+// to Itertoods::intersperse can be replaced with a chained method call to
+// the Iterator version once our MRSV is at least 1.56.
 #[allow(unstable_name_collisions)]
 pub(super) fn format_long_doc<D, F>(doc: D, f: F) -> String
 where
@@ -54,7 +60,12 @@ where
             }
             if let Some(detail) = desc.detail() {
                 s += "\n\n";
-                s.extend(detail.lines().map(|l| l.trim_start()).intersperse("\n"));
+                // The line below is ambigious until our MRSV is 1.56
+                //s.extend(detail.lines().map(|l| l.trim_start()).intersperse("\n"));
+                s.extend(Itertools::intersperse(
+                    detail.lines().map(|l| l.trim_start()),
+                    "\n",
+                ));
             }
             s
         },

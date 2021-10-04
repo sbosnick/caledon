@@ -53,8 +53,6 @@ struct Map<SI> {
 
     // server created objects
     server: Vec<Option<Arc<SI>>>,
-
-    default_tag: Option<NonZeroUsize>,
 }
 
 #[derive(Debug)]
@@ -234,7 +232,6 @@ impl<SI> Default for Map<SI> {
         Self {
             client: Vec::new(),
             server: Vec::new(),
-            default_tag: None,
         }
     }
 }
