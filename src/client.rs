@@ -11,12 +11,7 @@
 //! [Wayland]: https://wayland.freedesktop.org/
 
 use std::{
-    convert::TryInto,
-    error, fmt,
-    iter::FromIterator,
-    marker::PhantomData,
-    ops::DerefMut,
-    sync::Arc,
+    convert::TryInto, error, fmt, iter::FromIterator, marker::PhantomData, ops::DerefMut, sync::Arc,
 };
 
 use crossbeam::atomic::AtomicCell;
