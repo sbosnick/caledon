@@ -130,7 +130,7 @@ struct DisplayImpl<Si, St, WS, E> {
     state: WS,
     send: Mutex<Si>,
     display: Arc<protocols::Protocols>,
-    _phantom: PhantomData<(Si, E)>,
+    _phantom: PhantomData<E>,
 }
 
 impl<Si, St, WS, E> DisplayImpl<Si, St, WS, E>
