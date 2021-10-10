@@ -45,6 +45,9 @@ pub(crate) struct Global {
 }
 
 pub(crate) type GlobalKv = (u32, Global);
+// TODO: remove this when it is no longer needed
+#[allow(dead_code)]
+pub(crate) type GlobalKvRef<'a> = (&'a u32, &'a Global);
 
 /// A change indicator for the [`Registry`] from which the change notification arises.
 #[derive(Debug, Clone, PartialEq)]
@@ -238,6 +241,14 @@ impl<'a> Index<&u32> for RegistryLockRef<'a> {
     }
 }
 
+impl<'a> RegistryLockRef<'a> {
+    // TODO: remove this when it is no longer needed
+    #[allow(dead_code)]
+    pub fn iter(&self) -> impl Iterator<Item=GlobalKvRef> {
+        self.lock.map.iter()
+    }
+}
+
 impl Global {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
@@ -261,6 +272,18 @@ mod tests {
         let result = sut.lock_ref()[&key].clone();
 
         assert_eq!(result, global);
+    }
+
+    #[test]
+    fn registry_iter_includes_added_global() {
+        let interface = CString::new("wl_compositor").expect("bad CString");
+        let global = Global::new(interface, 1);
+
+        let sut = Registry::new();
+        let key = sut.lock_mut().add_new(global.clone());
+        let results: Vec<_> = sut.lock_ref().iter().map(|(name, global)| (*name, global.clone())).collect();
+
+        assert!(results.contains(&(key, global)), "Expected global not in the iteration.");
     }
 
     #[test]
