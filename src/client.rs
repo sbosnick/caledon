@@ -130,7 +130,7 @@ struct DisplayImpl<Si, St, WS, E> {
     state: WS,
     send: Mutex<Si>,
     display: Arc<protocols::Protocols>,
-    _phantom: PhantomData<(Si, E)>,
+    _phantom: PhantomData<E>,
 }
 
 impl<Si, St, WS, E> DisplayImpl<Si, St, WS, E>
@@ -180,6 +180,7 @@ where
         use protocols::{
             wayland::{
                 wl_callback::Events::Done,
+                wl_display::Events::DeleteId,
                 wl_display::Events::Error as WlError,
                 Events::{WlCallback, WlDisplay},
             },
@@ -194,6 +195,11 @@ where
                     let (_, _, m) = e.args();
                     let message = m.to_string_lossy();
                     future::err(Protocol { phase, message }.build())
+                }
+                Wayland(WlDisplay(DeleteId(d))) => {
+                    let (id,) = d.args();
+                    self.state.remove_object(*id);
+                    future::ok(())
                 }
                 Wayland(WlCallback(Done(d))) => {
                     let (r,) = d.args();
@@ -346,6 +352,7 @@ mod tests {
     #[derive(Default)]
     struct FakeState {
         next: AtomicU32,
+        removed: std::sync::Mutex<Vec<u32>>,
     }
 
     impl WaylandState<protocols::Protocols> for FakeState {
@@ -362,7 +369,10 @@ mod tests {
 
         fn add_remote_object(&self, _id: ObjectId, _object: protocols::Protocols) {}
 
-        fn remove_object(&self, _id: ObjectId) {}
+        fn remove_object(&self, id: u32) {
+            let mut removed = self.removed.lock().unwrap();
+            removed.push(id);
+        }
     }
 
     type DrainSink =
@@ -590,5 +600,27 @@ mod tests {
             .expect("Dispatcher errored.");
 
         assert_matches!(result, Ok(s) => assert_eq!(s, serial));
+    }
+
+    #[tokio::test]
+    async fn display_impl_delete_id_removes_id_from_state() {
+        use protocols::{wayland::wl_display::DeleteIdEvent, Events::Wayland};
+        let display_id = new_object_id(1);
+        let fake_id = 42;
+        let event = Wayland(DeleteIdEvent::new(display_id, fake_id).into());
+
+        let (sut, mut send) = new_dispatch_display_impl().await;
+        let sut = Arc::new(sut);
+        send.send(Ok(event))
+            .await
+            .expect("Can't send DeleteId event");
+        send.close_channel();
+        sut.clone().dispatch().await.expect("Error dispatching");
+
+        let removed = sut.state.removed.lock().unwrap();
+        assert!(
+            removed.contains(&fake_id),
+            "Id not removed on DeleteIdEvent"
+        );
     }
 }
