@@ -75,7 +75,7 @@ pub(crate) trait WaylandState<PF> {
 
     fn create_object(&self, f: impl Fn(ObjectId) -> PF) -> Result<Arc<PF>, Self::Error>;
     fn add_remote_object(&self, id: ObjectId, object: PF);
-    fn remove_object(&self, id: ObjectId);
+    fn remove_object(&self, id: u32);
 }
 
 /// Errors in the operation of the [Wayland] wire protocol.
@@ -150,7 +150,7 @@ where
         self.map.add(id, object);
     }
 
-    fn remove_object(&self, id: ObjectId) {
+    fn remove_object(&self, id: u32) {
         self.map.remove(id);
     }
 }

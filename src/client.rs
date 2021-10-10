@@ -346,7 +346,7 @@ mod tests {
     #[derive(Default)]
     struct FakeState {
         next: AtomicU32,
-        removed: std::sync::Mutex<Vec<ObjectId>>,
+        removed: std::sync::Mutex<Vec<u32>>,
     }
 
     impl WaylandState<protocols::Protocols> for FakeState {
@@ -363,7 +363,7 @@ mod tests {
 
         fn add_remote_object(&self, _id: ObjectId, _object: protocols::Protocols) {}
 
-        fn remove_object(&self, id: ObjectId) {
+        fn remove_object(&self, id: u32) {
             let mut removed = self.removed.lock().unwrap();
             removed.push(id);
         }
@@ -611,6 +611,6 @@ mod tests {
         sut.clone().dispatch().await.expect("Error dispatching");
 
         let removed = sut.state.removed.lock().unwrap();
-        assert!(removed.contains(&new_object_id(fake_id)), "Id not removed on DeleteIdEvent");
+        assert!(removed.contains(&fake_id), "Id not removed on DeleteIdEvent");
     }
 }

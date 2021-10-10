@@ -123,7 +123,8 @@ where
         map[tag] = Some(Arc::new(object));
     }
 
-    pub fn remove(&self, id: ObjectId) {
+    pub fn remove(&self, id: u32) {
+        let id = ObjectId(id);
         {
             let mut map = self.shared.map.lock().unwrap();
             let tag = get_tag(id);
