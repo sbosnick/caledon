@@ -180,8 +180,8 @@ where
         use protocols::{
             wayland::{
                 wl_callback::Events::Done,
-                wl_display::Events::Error as WlError,
                 wl_display::Events::DeleteId,
+                wl_display::Events::Error as WlError,
                 Events::{WlCallback, WlDisplay},
             },
             Events::Wayland,
@@ -611,11 +611,16 @@ mod tests {
 
         let (sut, mut send) = new_dispatch_display_impl().await;
         let sut = Arc::new(sut);
-        send.send(Ok(event)).await.expect("Can't send DeleteId event");
+        send.send(Ok(event))
+            .await
+            .expect("Can't send DeleteId event");
         send.close_channel();
         sut.clone().dispatch().await.expect("Error dispatching");
 
         let removed = sut.state.removed.lock().unwrap();
-        assert!(removed.contains(&fake_id), "Id not removed on DeleteIdEvent");
+        assert!(
+            removed.contains(&fake_id),
+            "Id not removed on DeleteIdEvent"
+        );
     }
 }
