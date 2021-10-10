@@ -181,6 +181,7 @@ where
             wayland::{
                 wl_callback::Events::Done,
                 wl_display::Events::Error as WlError,
+                wl_display::Events::DeleteId,
                 Events::{WlCallback, WlDisplay},
             },
             Events::Wayland,
@@ -194,6 +195,11 @@ where
                     let (_, _, m) = e.args();
                     let message = m.to_string_lossy();
                     future::err(Protocol { phase, message }.build())
+                }
+                Wayland(WlDisplay(DeleteId(d))) => {
+                    let (id,) = d.args();
+                    self.state.remove_object(*id);
+                    future::ok(())
                 }
                 Wayland(WlCallback(Done(d))) => {
                     let (r,) = d.args();
@@ -597,7 +603,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Temporarily ignored to allow for some refactoring."]
     async fn display_impl_delete_id_removes_id_from_state() {
         use protocols::{wayland::wl_display::DeleteIdEvent, Events::Wayland};
         let display_id = new_object_id(1);
