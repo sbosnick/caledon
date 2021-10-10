@@ -346,6 +346,7 @@ mod tests {
     #[derive(Default)]
     struct FakeState {
         next: AtomicU32,
+        removed: std::sync::Mutex<Vec<ObjectId>>,
     }
 
     impl WaylandState<protocols::Protocols> for FakeState {
@@ -362,7 +363,10 @@ mod tests {
 
         fn add_remote_object(&self, _id: ObjectId, _object: protocols::Protocols) {}
 
-        fn remove_object(&self, _id: ObjectId) {}
+        fn remove_object(&self, id: ObjectId) {
+            let mut removed = self.removed.lock().unwrap();
+            removed.push(id);
+        }
     }
 
     type DrainSink =
@@ -590,5 +594,23 @@ mod tests {
             .expect("Dispatcher errored.");
 
         assert_matches!(result, Ok(s) => assert_eq!(s, serial));
+    }
+
+    #[tokio::test]
+    #[ignore = "Temporarily ignored to allow for some refactoring."]
+    async fn display_impl_delete_id_removes_id_from_state() {
+        use protocols::{wayland::wl_display::DeleteIdEvent, Events::Wayland};
+        let display_id = new_object_id(1);
+        let fake_id = 42;
+        let event = Wayland(DeleteIdEvent::new(display_id, fake_id).into());
+
+        let (sut, mut send) = new_dispatch_display_impl().await;
+        let sut = Arc::new(sut);
+        send.send(Ok(event)).await.expect("Can't send DeleteId event");
+        send.close_channel();
+        sut.clone().dispatch().await.expect("Error dispatching");
+
+        let removed = sut.state.removed.lock().unwrap();
+        assert!(removed.contains(&new_object_id(fake_id)), "Id not removed on DeleteIdEvent");
     }
 }
