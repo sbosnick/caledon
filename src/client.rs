@@ -11,7 +11,8 @@
 //! [Wayland]: https://wayland.freedesktop.org/
 
 use std::{
-    convert::TryInto, error, fmt, iter::FromIterator, marker::PhantomData, ops::DerefMut, sync::Arc,
+    convert::TryInto, error, ffi::CStr, fmt, iter::FromIterator, marker::PhantomData,
+    ops::DerefMut, sync::Arc,
 };
 
 use crossbeam::atomic::AtomicCell;
@@ -30,7 +31,7 @@ use crate::{
         self,
         wayland::{WlCallback, WlDisplay, WlRegistry},
     },
-    registry::{Global, GlobalKv, Registry},
+    registry::{Global, GlobalKv, Registry, RegistryLockRef},
     IoChannel,
 };
 
@@ -45,9 +46,37 @@ pub struct Display<T> {
     inner: Arc<DisplayImpl<ClientSend<T>, ClientRecv<T>, ClientState, WireError>>,
 }
 
+/// The possible errors arising in the core client-side [Wayland] objects.
+///
+/// [Wayland]: https://wayland.freedesktop.org/
+#[derive(Debug, Snafu)]
+pub struct ClientError(ClientErrorImpl<WireError>);
+
+/// A read-only reference to the current contents of the registry.
+///
+/// This reference holds a lock on the registry that prevents updates while
+/// the reference exists. If you have two subseqently obtained `RegistryRef`
+/// values the contents of the regististy may have changed between obtaining
+/// those references.
+pub struct RegistryRef<'a> {
+    guard: RegistryLockRef<'a>,
+}
+
+/// An item in the registry.
+pub struct RegistryItem<'a> {
+    name: u32,
+    interface: &'a CStr,
+    version: u32,
+}
+
+/// The numeric name for an item in the registry.
+pub struct GlobalName(u32);
+
 type ClientSend<T> = WireSend<T, ClientRole, protocols::Protocols>;
 type ClientRecv<T> = WireRecv<T, ClientRole, protocols::Protocols>;
 type ClientState = WireState<ClientRole, protocols::Protocols>;
+
+// === impl Display ===
 
 impl<T> Display<T>
 where
@@ -77,13 +106,14 @@ where
     pub async fn sync(&self) -> Result<u32, ClientError> {
         Ok(self.inner.sync().await?)
     }
+
+    /// Get a read-only, locked reference to the current contents of the registry.
+    pub fn registry(&self) -> RegistryRef {
+        self.inner.registry()
+    }
 }
 
-/// The possible errors arising in the core client-side [Wayland] objects.
-///
-/// [Wayland]: https://wayland.freedesktop.org/
-#[derive(Debug, Snafu)]
-pub struct ClientError(ClientErrorImpl<WireError>);
+// === impl inner ClientError ===
 
 #[derive(Debug, Snafu)]
 enum ClientErrorImpl<E: error::Error + 'static> {
@@ -120,6 +150,8 @@ impl fmt::Display for ClientPhase {
         }
     }
 }
+
+// === impl inner Display (DisplayImpl) ===
 
 struct DisplayImpl<Si, St, WS, E> {
     // TODO: remove this when it is no longer needed
@@ -232,7 +264,48 @@ where
             .build()
         })
     }
+
+    fn registry(&self) -> RegistryRef {
+        RegistryRef {
+            guard: self.registry.lock_ref(),
+        }
+    }
 }
+
+// === impl RegistryRef and Registry Item ===
+
+impl RegistryRef<'_> {
+    /// An iterator over the entries in the registry
+    pub fn iter(&self) -> impl Iterator<Item = RegistryItem> {
+        self.guard.iter().map(|(name, global)| RegistryItem {
+            name: *name,
+            interface: global.interface.as_ref(),
+            version: global.version,
+        })
+        // todo!();
+        // #[allow(unreachable_code)]
+        // std::iter::empty()
+    }
+}
+
+impl RegistryItem<'_> {
+    /// Get the numberic name of the item.
+    pub fn name(&self) -> GlobalName {
+        GlobalName(self.name)
+    }
+
+    /// Get the interface implemented by the item.
+    pub fn interface(&self) -> &CStr {
+        self.interface
+    }
+
+    /// Get the version of the interface implemented by the item.
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+}
+
+// === helper functions ===
 
 fn create_object<WS, F, I, E>(
     state: &WS,
@@ -622,5 +695,37 @@ mod tests {
             removed.contains(&fake_id),
             "Id not removed on DeleteIdEvent"
         );
+    }
+
+    #[tokio::test]
+    async fn display_impl_registry_is_empty_without_global_events() {
+        let (sut, _) = new_dispatch_display_impl().await;
+        let count = sut.registry().iter().count();
+
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn display_impl_registry_contains_initial_globals() {
+        use protocols::wayland::{wl_callback::DoneEvent, wl_registry::GlobalEvent};
+        use protocols::Events::Wayland;
+        let interface = CString::new("wl_compositor").expect("Can't create interface name");
+        let state = FakeState::default();
+        let recv = stream::iter(
+            vec![
+                Ok(Wayland(
+                    GlobalEvent::new(new_object_id(2), 1, interface, 1).into(),
+                )),
+                Ok(Wayland(DoneEvent::new(new_object_id(3), 0).into())),
+            ]
+            .into_iter(),
+        );
+
+        let sut = DisplayImpl::new(sink::drain().sink_map_err(|_| StubError), recv, state)
+            .await
+            .expect("Unable to create DisplayImpl");
+        let count = sut.registry().iter().count();
+
+        assert_eq!(count, 1);
     }
 }

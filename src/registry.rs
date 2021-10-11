@@ -40,8 +40,8 @@ use tokio_util::sync::CancellationToken;
 /// [Wayland]: https://wayland.freedesktop.org/
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Global {
-    interface: CString,
-    version: u32,
+    pub(crate) interface: CString,
+    pub(crate) version: u32,
 }
 
 pub(crate) type GlobalKv = (u32, Global);
@@ -244,7 +244,7 @@ impl<'a> Index<&u32> for RegistryLockRef<'a> {
 impl<'a> RegistryLockRef<'a> {
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
-    pub fn iter(&self) -> impl Iterator<Item=GlobalKvRef> {
+    pub fn iter(&self) -> impl Iterator<Item = GlobalKvRef> {
         self.lock.map.iter()
     }
 }
@@ -281,9 +281,16 @@ mod tests {
 
         let sut = Registry::new();
         let key = sut.lock_mut().add_new(global.clone());
-        let results: Vec<_> = sut.lock_ref().iter().map(|(name, global)| (*name, global.clone())).collect();
+        let results: Vec<_> = sut
+            .lock_ref()
+            .iter()
+            .map(|(name, global)| (*name, global.clone()))
+            .collect();
 
-        assert!(results.contains(&(key, global)), "Expected global not in the iteration.");
+        assert!(
+            results.contains(&(key, global)),
+            "Expected global not in the iteration."
+        );
     }
 
     #[test]
