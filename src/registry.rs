@@ -25,7 +25,7 @@
 use std::{
     collections::HashMap,
     convert::TryInto,
-    ffi::CString,
+    ffi::{CStr, CString},
     iter::FromIterator,
     ops::Index,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -40,8 +40,8 @@ use tokio_util::sync::CancellationToken;
 /// [Wayland]: https://wayland.freedesktop.org/
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Global {
-    pub(crate) interface: CString,
-    pub(crate) version: u32,
+    interface: CString,
+    version: u32,
 }
 
 pub(crate) type GlobalKv = (u32, Global);
@@ -251,10 +251,16 @@ impl<'a> RegistryLockRef<'a> {
 }
 
 impl Global {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn new(interface: CString, version: u32) -> Self {
         Self { interface, version }
+    }
+
+    pub(crate) fn interface(&self) -> &CStr {
+        &self.interface
+    }
+
+    pub(crate) fn version(&self) -> u32 {
+        self.version
     }
 }
 

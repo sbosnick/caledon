@@ -291,8 +291,8 @@ impl RegistryRef<'_> {
     pub fn iter(&self) -> impl Iterator<Item = RegistryItem> {
         self.guard.iter().map(|(name, global)| RegistryItem {
             name: *name,
-            interface: global.interface.as_ref(),
-            version: global.version,
+            interface: global.interface(),
+            version: global.version(),
         })
         // todo!();
         // #[allow(unreachable_code)]
