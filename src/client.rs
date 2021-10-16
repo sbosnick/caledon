@@ -214,7 +214,8 @@ where
                 wl_callback::Events::Done,
                 wl_display::Events::DeleteId,
                 wl_display::Events::Error as WlError,
-                Events::{WlCallback, WlDisplay},
+                wl_registry::Events::Global as GlobalAdd,
+                Events::{WlCallback, WlDisplay, WlRegistry},
             },
             Events::Wayland,
         };
@@ -240,6 +241,12 @@ where
                             .resolve(d.sender(), *r)
                             .context(UnknownObject { phase }),
                     )
+                }
+                Wayland(WlRegistry(GlobalAdd(g))) => {
+                    let (name, interface, version) = g.args();
+                    let global = Global::new(interface.clone(), *version);
+                    self.registry.lock_mut().add(*name, global);
+                    future::ok(())
                 }
                 _ => future::ok(()),
             })
@@ -727,5 +734,26 @@ mod tests {
         let count = sut.registry().iter().count();
 
         assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn display_impl_registry_contains_added_globals() {
+        use protocols::{Events::Wayland, wayland::wl_registry::GlobalEvent};
+        let (display, mut send) = new_dispatch_display_impl().await;
+        let interface = CString::new("wl_compositor").expect("Can't create interface name");
+        let do_send = async {
+            send.send(Ok(Wayland(GlobalEvent::new(new_object_id(2),1, interface, 1).into()))).await.expect("Couldn't send GlobalEvent");
+            send.close_channel();
+        };
+
+
+        let sut = Arc::new(display);
+        let (_, result) = tokio::join!(
+            do_send,
+            sut.clone().dispatch()
+        );
+        result.expect("Dispatch returned an error");
+
+        assert_eq!(sut.registry().iter().count(), 1);
     }
 }
