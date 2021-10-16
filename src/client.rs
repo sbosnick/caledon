@@ -738,20 +738,20 @@ mod tests {
 
     #[tokio::test]
     async fn display_impl_registry_contains_added_globals() {
-        use protocols::{Events::Wayland, wayland::wl_registry::GlobalEvent};
+        use protocols::{wayland::wl_registry::GlobalEvent, Events::Wayland};
         let (display, mut send) = new_dispatch_display_impl().await;
         let interface = CString::new("wl_compositor").expect("Can't create interface name");
         let do_send = async {
-            send.send(Ok(Wayland(GlobalEvent::new(new_object_id(2),1, interface, 1).into()))).await.expect("Couldn't send GlobalEvent");
+            send.send(Ok(Wayland(
+                GlobalEvent::new(new_object_id(2), 1, interface, 1).into(),
+            )))
+            .await
+            .expect("Couldn't send GlobalEvent");
             send.close_channel();
         };
 
-
         let sut = Arc::new(display);
-        let (_, result) = tokio::join!(
-            do_send,
-            sut.clone().dispatch()
-        );
+        let (_, result) = tokio::join!(do_send, sut.clone().dispatch());
         result.expect("Dispatch returned an error");
 
         assert_eq!(sut.registry().iter().count(), 1);
