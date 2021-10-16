@@ -104,8 +104,9 @@ impl Registry {
 
     /// Return a [`Stream`] of [`GlobalChange`] notifications.
     ///
-    /// The supplied [`CancellationToken`] will be cancel if the caller can't keep up with the
-    /// generated steam of change notifications. This is a somewhat brutal form of back pressure.
+    /// The supplied [`CancellationToken`] will be cancelled if the caller
+    /// can't keep up with the generated steam of change notifications. This
+    /// is a somewhat brutal form of back pressure.
     // TODO: remove this when it is no longer needed
     #[allow(dead_code)]
     pub fn changes(&self, cancel: CancellationToken) -> impl Stream<Item = GlobalChange> {
