@@ -214,7 +214,7 @@ where
                 wl_callback::Events::Done,
                 wl_display::Events::DeleteId,
                 wl_display::Events::Error as WlError,
-                wl_registry::Events::Global as GlobalAdd,
+                wl_registry::Events::{Global as GlobalAdd, GlobalRemove},
                 Events::{WlCallback, WlDisplay, WlRegistry},
             },
             Events::Wayland,
@@ -246,6 +246,11 @@ where
                     let (name, interface, version) = g.args();
                     let global = Global::new(interface.clone(), *version);
                     self.registry.lock_mut().add(*name, global);
+                    future::ok(())
+                }
+                Wayland(WlRegistry(GlobalRemove(g))) => {
+                    let (name,) = g.args();
+                    self.registry.lock_mut().remove(*name);
                     future::ok(())
                 }
                 _ => future::ok(()),
@@ -755,5 +760,34 @@ mod tests {
         result.expect("Dispatch returned an error");
 
         assert_eq!(sut.registry().iter().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn display_impl_registry_removes_removed_globals() {
+        use protocols::{
+            wayland::wl_registry::{GlobalEvent, GlobalRemoveEvent},
+            Events::Wayland,
+        };
+        let (display, mut send) = new_dispatch_display_impl().await;
+        let interface = CString::new("wl_compositor").expect("Can't create interface name");
+        let do_send = async {
+            send.send(Ok(Wayland(
+                GlobalEvent::new(new_object_id(2), 1, interface, 1).into(),
+            )))
+            .await
+            .expect("Couldn't send GlobalEvent");
+            send.send(Ok(Wayland(
+                GlobalRemoveEvent::new(new_object_id(2), 1).into(),
+            )))
+            .await
+            .expect("Couldn't send GlobalRemoveEvent");
+            send.close_channel();
+        };
+
+        let sut = Arc::new(display);
+        let (_, result) = tokio::join!(do_send, sut.clone().dispatch());
+        result.expect("Dispatch returned an error");
+
+        assert_eq!(sut.registry().iter().count(), 0);
     }
 }
