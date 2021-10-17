@@ -208,50 +208,20 @@ where
 
     async fn dispatch(self: Arc<Self>) -> Result<(), ClientErrorImpl<E>> {
         use protocols::{
-            wayland::{
-                wl_callback::Events::Done,
-                wl_display::Events::DeleteId,
-                wl_display::Events::Error as WlError,
-                wl_registry::Events::{Global as GlobalAdd, GlobalRemove},
-                Events::{WlCallback, WlDisplay, WlRegistry},
-            },
+            wayland::Events::{WlCallback, WlDisplay, WlRegistry},
             Events::Wayland,
         };
         let phase = ClientPhase::Dispatch;
         let recv = self.recv.take().context(MultiDispach {})?;
 
         recv.map_err(|e| Transport { phase }.into_error(e))
-            .try_for_each(|event| match event {
-                Wayland(WlDisplay(WlError(e))) => {
-                    let (_, _, m) = e.args();
-                    let message = m.to_string_lossy();
-                    future::err(Protocol { phase, message }.build())
-                }
-                Wayland(WlDisplay(DeleteId(d))) => {
-                    let (id,) = d.args();
-                    self.state.remove_object(*id);
-                    future::ok(())
-                }
-                Wayland(WlCallback(Done(d))) => {
-                    let (r,) = d.args();
-                    future::ready(
-                        self.callbacks
-                            .resolve(d.sender(), *r)
-                            .context(UnknownObject { phase }),
-                    )
-                }
-                Wayland(WlRegistry(GlobalAdd(g))) => {
-                    let (name, interface, version) = g.args();
-                    let global = Global::new(interface.clone(), *version);
-                    self.registry.lock_mut().add(*name, global);
-                    future::ok(())
-                }
-                Wayland(WlRegistry(GlobalRemove(g))) => {
-                    let (name,) = g.args();
-                    self.registry.lock_mut().remove(*name);
-                    future::ok(())
-                }
-                _ => future::ok(()),
+            .try_for_each(|event| {
+                future::ready(match event {
+                    Wayland(WlDisplay(event)) => dispatch_display_event(&event, &self.state),
+                    Wayland(WlCallback(event)) => dispatch_callback_event(&event, &self.callbacks),
+                    Wayland(WlRegistry(event)) => dispatch_registry_event(&event, &self.registry),
+                    _ => Ok(()),
+                })
             })
             .await
     }
@@ -389,6 +359,74 @@ where
         }
         .build(),
     )
+}
+
+fn dispatch_display_event<WS, E>(
+    event: &protocols::wayland::wl_display::Events,
+    state: &WS,
+) -> Result<(), ClientErrorImpl<E>>
+where
+    E: error::Error,
+    WS: WaylandState<protocols::Protocols>,
+{
+    use protocols::wayland::wl_display::Events::{DeleteId, Error as WlError};
+    let phase = ClientPhase::Dispatch;
+
+    match event {
+        WlError(e) => {
+            let (_, _, m) = e.args();
+            let message = m.to_string_lossy();
+            Err(Protocol { phase, message }.build())
+        }
+        DeleteId(d) => {
+            let (id,) = d.args();
+            state.remove_object(*id);
+            Ok(())
+        }
+    }
+}
+
+fn dispatch_callback_event<E>(
+    event: &protocols::wayland::wl_callback::Events,
+    callbacks: &Callbacks,
+) -> Result<(), ClientErrorImpl<E>>
+where
+    E: error::Error,
+{
+    use protocols::wayland::wl_callback::Events::Done;
+    let phase = ClientPhase::Dispatch;
+
+    match event {
+        Done(d) => {
+            let (r,) = d.args();
+            callbacks
+                .resolve(d.sender(), *r)
+                .context(UnknownObject { phase })
+        }
+    }
+}
+
+fn dispatch_registry_event<E>(
+    event: &protocols::wayland::wl_registry::Events,
+    registry: &Registry,
+) -> Result<(), ClientErrorImpl<E>>
+where
+    E: error::Error,
+{
+    use protocols::wayland::wl_registry::Events::{Global as GlobalAdd, GlobalRemove};
+
+    match event {
+        GlobalAdd(g) => {
+            let (name, interface, version) = g.args();
+            let global = Global::new(interface.clone(), *version);
+            registry.lock_mut().add(*name, global);
+        }
+        GlobalRemove(g) => {
+            let (name,) = g.args();
+            registry.lock_mut().remove(*name);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
