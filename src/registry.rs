@@ -45,8 +45,6 @@ pub(crate) struct Global {
 }
 
 pub(crate) type GlobalKv = (u32, Global);
-// TODO: remove this when it is no longer needed
-#[allow(dead_code)]
 pub(crate) type GlobalKvRef<'a> = (&'a u32, &'a Global);
 
 /// A change indicator for the [`Registry`] from which the change notification arises.
@@ -122,16 +120,12 @@ impl Registry {
         reciever
     }
 
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn lock_mut(&self) -> RegistryLockMut {
         RegistryLockMut {
             lock: self.shared.state.write().unwrap(),
         }
     }
 
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn lock_ref(&self) -> RegistryLockRef {
         RegistryLockRef {
             lock: self.shared.state.read().unwrap(),
@@ -194,8 +188,6 @@ impl Default for State {
 }
 
 impl<'a> RegistryLockMut<'a> {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn add(&mut self, key: u32, value: Global) {
         self.lock.map.insert(key, value.clone());
         self.publish(GlobalChange::Add(key, value));
@@ -210,8 +202,6 @@ impl<'a> RegistryLockMut<'a> {
         key
     }
 
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn remove(&mut self, key: u32) {
         self.lock.map.remove(&key);
         self.publish(GlobalChange::Remove(key));
