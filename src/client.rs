@@ -154,8 +154,6 @@ impl fmt::Display for ClientPhase {
 // === impl inner Display (DisplayImpl) ===
 
 struct DisplayImpl<Si, St, WS, E> {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     registry: Registry,
     callbacks: Callbacks,
     recv: AtomicCell<Option<St>>,
@@ -294,9 +292,6 @@ impl RegistryRef<'_> {
             interface: global.interface(),
             version: global.version(),
         })
-        // todo!();
-        // #[allow(unreachable_code)]
-        // std::iter::empty()
     }
 }
 
