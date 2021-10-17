@@ -20,7 +20,8 @@ use futures_core::Stream;
 use futures_sink::Sink;
 use futures_util::{future, sink::SinkExt, stream::TryStreamExt};
 use snafu::{IntoError, OptionExt, ResultExt, Snafu};
-use tokio::sync::Mutex;
+use tokio::{select, sync::Mutex};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     core::{
@@ -131,6 +132,9 @@ enum ClientErrorImpl<E: error::Error + 'static> {
         source: UnknownCallbackError,
         phase: ClientPhase,
     },
+
+    #[snafu(display("Registry event observer failed to observe registry changes."))]
+    RegistryBackpressure,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -155,6 +159,7 @@ impl fmt::Display for ClientPhase {
 
 struct DisplayImpl<Si, St, WS, E> {
     registry: Registry,
+    reg_backpressure: CancellationToken,
     callbacks: Callbacks,
     recv: AtomicCell<Option<St>>,
     state: WS,
@@ -203,6 +208,7 @@ where
             state,
             display,
             _phantom: PhantomData,
+            reg_backpressure: CancellationToken::new(),
         })
     }
 
@@ -214,16 +220,19 @@ where
         let phase = ClientPhase::Dispatch;
         let recv = self.recv.take().context(MultiDispach {})?;
 
-        recv.map_err(|e| Transport { phase }.into_error(e))
-            .try_for_each(|event| {
-                future::ready(match event {
-                    Wayland(WlDisplay(event)) => dispatch_display_event(&event, &self.state),
-                    Wayland(WlCallback(event)) => dispatch_callback_event(&event, &self.callbacks),
-                    Wayland(WlRegistry(event)) => dispatch_registry_event(&event, &self.registry),
-                    _ => Ok(()),
-                })
-            })
-            .await
+        select! {
+            _ = self.reg_backpressure.cancelled() => RegistryBackpressure{}.fail(),
+
+            result = recv.map_err(|e| Transport { phase }.into_error(e))
+                .try_for_each(|event| {
+                    future::ready(match event {
+                        Wayland(WlDisplay(event)) => dispatch_display_event(&event, &self.state),
+                        Wayland(WlCallback(event)) => dispatch_callback_event(&event, &self.callbacks),
+                        Wayland(WlRegistry(event)) => dispatch_registry_event(&event, &self.registry),
+                        _ => Ok(()),
+                    })
+                }) => result,
+        }
     }
 
     async fn sync(&self) -> Result<u32, ClientErrorImpl<E>> {
