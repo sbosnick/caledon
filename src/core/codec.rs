@@ -62,6 +62,7 @@ use super::{
 /// clients and events for servers.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
+#[derive(Debug)]
 pub(crate) struct WaylandCodec<R, P> {
     decode_state: DecodeState,
     _marker: PhantomData<(R, P)>,
@@ -163,7 +164,7 @@ impl<R, P> Default for WaylandCodec<R, P> {
 
 // === WaylandHeader ===
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct WaylandHeader {
     sender: u32,
 
@@ -232,6 +233,7 @@ where
 
 // === DecodeState ===
 
+#[derive(Debug)]
 enum DecodeState {
     Head,
     Args(WaylandHeader),

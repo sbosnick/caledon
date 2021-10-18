@@ -15,9 +15,11 @@ use super::{FromOpcodeError, MessageMaker, OpCode, ProtocolFamily, ProtocolFamil
 /// clients.
 pub trait Role {}
 
+#[derive(Debug)]
 pub(crate) struct ServerRole {}
 impl Role for ServerRole {}
 
+#[derive(Debug)]
 pub(crate) struct ClientRole {}
 impl Role for ClientRole {}
 

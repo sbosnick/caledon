@@ -11,7 +11,7 @@
 //! [Wayland]: https://wayland.freedesktop.org/
 
 use std::{
-    fmt::Display,
+    fmt::{self, Display},
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -46,6 +46,7 @@ pub(crate) type WireProtocol<T, R, PF> = (WireSend<T, R, PF>, WireRecv<T, R, PF>
 pub(crate) fn make_wire_protocol<T, R, PF>(channel: T) -> WireProtocol<T, R, PF>
 where
     PF: ProtocolFamily + HasFd<R> + SendMsg<R>,
+    <PF as SendMsg<R>>::Output: fmt::Debug,
     R: Role,
     T: IoChannel + Unpin,
     Extractor: ExtractIndex<R>,
@@ -131,6 +132,7 @@ impl Display for SendIoErrorPhase {
 }
 
 /// The concrete implementation of [WaylandState] for the wire protocol.
+#[derive(Debug)]
 pub(crate) struct WireState<R, PF> {
     map: ObjectMap<PF, R>,
 }
@@ -163,9 +165,11 @@ where
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 #[pin_project]
+#[derive(Debug)]
 pub(crate) struct WireSend<T, R, PF>
 where
     PF: SendMsg<R>,
+    <PF as SendMsg<R>>::Output: fmt::Debug,
     R: Role,
 {
     #[pin]
@@ -175,6 +179,7 @@ where
 impl<T, R, PF> Sink<SendMsgType<R, PF>> for WireSend<T, R, PF>
 where
     PF: ProtocolFamily + SendMsg<R>,
+    <PF as SendMsg<R>>::Output: fmt::Debug,
     R: Role,
     T: IoChannel + Unpin,
 {
@@ -219,6 +224,7 @@ where
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
 #[pin_project]
+#[derive(Debug)]
 pub(crate) struct WireRecv<T, R, PF> {
     #[pin]
     inner: SplitStream<Transport<T, R, PF>>,

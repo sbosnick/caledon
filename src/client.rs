@@ -43,6 +43,7 @@ mod callbacks;
 /// The core client-side object to access a [Wayland] server.
 ///
 /// [Wayland]: https://wayland.freedesktop.org/
+#[derive(Debug)]
 pub struct Display<T> {
     inner: Arc<DisplayImpl<ClientSend<T>, ClientRecv<T>, ClientState, WireError>>,
 }
@@ -59,11 +60,13 @@ pub struct ClientError(ClientErrorImpl<WireError>);
 /// the reference exists. If you have two subseqently obtained `RegistryRef`
 /// values the contents of the regististy may have changed between obtaining
 /// those references.
+#[derive(Debug)]
 pub struct RegistryRef<'a> {
     guard: RegistryLockRef<'a>,
 }
 
 /// An item in the registry.
+#[derive(Debug)]
 pub struct RegistryItem<'a> {
     name: u32,
     interface: &'a CStr,
@@ -71,6 +74,7 @@ pub struct RegistryItem<'a> {
 }
 
 /// The numeric name for an item in the registry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GlobalName(u32);
 
 type ClientSend<T> = WireSend<T, ClientRole, protocols::Protocols>;
@@ -111,6 +115,14 @@ where
     /// Get a read-only, locked reference to the current contents of the registry.
     pub fn registry(&self) -> RegistryRef {
         self.inner.registry()
+    }
+}
+
+impl<T> Clone for Display<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -157,6 +169,7 @@ impl fmt::Display for ClientPhase {
 
 // === impl inner Display (DisplayImpl) ===
 
+// Add any new fields to the fmt::Debug impl
 struct DisplayImpl<Si, St, WS, E> {
     registry: Registry,
     reg_backpressure: CancellationToken,
@@ -261,6 +274,26 @@ where
     }
 }
 
+// Implement this directly instead of deriving it because the AtomicCell
+// type of recv does not allow for recv to support fmt::Debug
+impl<Si, St, WS, E> fmt::Debug for DisplayImpl<Si, St, WS, E>
+where
+    WS: fmt::Debug,
+    Si: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.debug_struct("DisplayImpl")
+            .field("registry", &self.registry)
+            .field("reg_backpressure", &self.reg_backpressure)
+            .field("callbacks", &self.callbacks)
+            .field("recv", &"{not shown}")
+            .field("state", &self.state)
+            .field("send", &self.send)
+            .field("display", &self.display)
+            .finish()
+    }
+}
+
 // === impl RegistryRef and Registry Item ===
 
 impl RegistryRef<'_> {
@@ -288,6 +321,14 @@ impl RegistryItem<'_> {
     /// Get the version of the interface implemented by the item.
     pub fn version(&self) -> u32 {
         self.version
+    }
+}
+
+// === impl GlobalName ===
+
+impl fmt::Display for GlobalName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "GlobalName({})", self.0)
     }
 }
 
