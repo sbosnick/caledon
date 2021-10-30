@@ -105,8 +105,6 @@ impl Registry {
     /// The supplied [`CancellationToken`] will be cancelled if the caller
     /// can't keep up with the generated steam of change notifications. This
     /// is a somewhat brutal form of back pressure.
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn changes(&self, cancel: CancellationToken) -> impl Stream<Item = GlobalChange> {
         let mut state = self.shared.state.write().unwrap();
 
@@ -233,8 +231,6 @@ impl<'a> Index<&u32> for RegistryLockRef<'a> {
 }
 
 impl<'a> RegistryLockRef<'a> {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn iter(&self) -> impl Iterator<Item = GlobalKvRef> {
         self.lock.map.iter()
     }
