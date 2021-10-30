@@ -67,8 +67,8 @@ pub struct ClientError(ClientErrorImpl<WireError>);
 /// A read-only reference to the current contents of the registry.
 ///
 /// This reference holds a lock on the registry that prevents updates while
-/// the reference exists. If you have two subseqently obtained `RegistryRef`
-/// values the contents of the regististy may have changed between obtaining
+/// the reference exists. If you have two consecutively obtained `RegistryRef`
+/// values the contents of the registry may have changed between obtaining
 /// those references.
 #[derive(Debug)]
 pub struct RegistryRef<'a> {
