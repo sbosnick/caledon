@@ -357,7 +357,7 @@ impl RegistryRef<'_> {
 }
 
 impl RegistryItem<'_> {
-    /// Get the numberic name of the item.
+    /// Get the numeric name of the item.
     pub fn name(&self) -> GlobalName {
         GlobalName(self.name)
     }
@@ -374,7 +374,7 @@ impl RegistryItem<'_> {
 }
 
 impl RegistryAddItem {
-    /// Get the numberic name of the item.
+    /// Get the numeric name of the item.
     pub fn name(&self) -> GlobalName {
         GlobalName(self.name)
     }
