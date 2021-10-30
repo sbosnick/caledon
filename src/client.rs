@@ -11,14 +11,24 @@
 //! [Wayland]: https://wayland.freedesktop.org/
 
 use std::{
-    convert::TryInto, error, ffi::CStr, fmt, iter::FromIterator, marker::PhantomData,
-    ops::DerefMut, sync::Arc,
+    convert::TryInto,
+    error,
+    ffi::{CStr, CString},
+    fmt,
+    iter::FromIterator,
+    marker::PhantomData,
+    ops::DerefMut,
+    sync::Arc,
 };
 
 use crossbeam::atomic::AtomicCell;
 use futures_core::Stream;
 use futures_sink::Sink;
-use futures_util::{future, sink::SinkExt, stream::TryStreamExt};
+use futures_util::{
+    future,
+    sink::SinkExt,
+    stream::{StreamExt, TryStreamExt},
+};
 use snafu::{IntoError, OptionExt, ResultExt, Snafu};
 use tokio::{select, sync::Mutex};
 use tokio_util::sync::CancellationToken;
@@ -32,7 +42,7 @@ use crate::{
         self,
         wayland::{WlCallback, WlDisplay, WlRegistry},
     },
-    registry::{Global, GlobalKv, Registry, RegistryLockRef},
+    registry::{Global, GlobalChange, GlobalKv, Registry, RegistryLockRef},
     IoChannel,
 };
 
@@ -71,6 +81,27 @@ pub struct RegistryItem<'a> {
     name: u32,
     interface: &'a CStr,
     version: u32,
+}
+
+/// A item being added to the registry.
+#[derive(Debug)]
+pub struct RegistryAddItem {
+    name: u32,
+    interface: CString,
+    version: u32,
+}
+
+/// A change to the registry.
+///
+/// The [`Display::registry_changes`] method produces a [`Stream`] of
+/// `RegistryChange` items.
+#[derive(Debug)]
+pub enum RegistryChange {
+    /// An addition of a new global to the registry.
+    Add(RegistryAddItem),
+
+    /// A removal of a global from the registry.
+    Remove(GlobalName),
 }
 
 /// The numeric name for an item in the registry.
@@ -115,6 +146,11 @@ where
     /// Get a read-only, locked reference to the current contents of the registry.
     pub fn registry(&self) -> RegistryRef {
         self.inner.registry()
+    }
+
+    /// Get the [`Stream`] of changes to the registry.
+    pub fn registry_changes(&self) -> impl Stream<Item = RegistryChange> {
+        self.inner.registry_changes()
     }
 }
 
@@ -272,6 +308,19 @@ where
             guard: self.registry.lock_ref(),
         }
     }
+
+    fn registry_changes(&self) -> impl Stream<Item = RegistryChange> {
+        self.registry
+            .changes(self.reg_backpressure.clone())
+            .map(|change| match change {
+                GlobalChange::Add(name, global) => RegistryChange::Add(RegistryAddItem {
+                    name,
+                    interface: global.interface().to_owned(),
+                    version: global.version(),
+                }),
+                GlobalChange::Remove(name) => RegistryChange::Remove(GlobalName(name)),
+            })
+    }
 }
 
 // Implement this directly instead of deriving it because the AtomicCell
@@ -294,7 +343,7 @@ where
     }
 }
 
-// === impl RegistryRef and Registry Item ===
+// === impl RegistryRef, RegistryItem, and RegistryAddItem ===
 
 impl RegistryRef<'_> {
     /// An iterator over the entries in the registry
@@ -324,6 +373,22 @@ impl RegistryItem<'_> {
     }
 }
 
+impl RegistryAddItem {
+    /// Get the numberic name of the item.
+    pub fn name(&self) -> GlobalName {
+        GlobalName(self.name)
+    }
+
+    /// Get the interface implemented by the item.
+    pub fn interface(&self) -> &CStr {
+        &self.interface
+    }
+
+    /// Get the version of the interface implemented by the item.
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+}
 // === impl GlobalName ===
 
 impl fmt::Display for GlobalName {
@@ -872,5 +937,60 @@ mod tests {
         result.expect("Dispatch returned an error");
 
         assert_eq!(sut.registry().iter().count(), 0);
+    }
+
+    #[tokio::test]
+    async fn display_impl_registry_changes_streams_add() {
+        use protocols::{wayland::wl_registry::GlobalEvent, Events::Wayland};
+        let (display, mut send) = new_dispatch_display_impl().await;
+        let interface = CString::new("wl_compositor").expect("Can't create interface name");
+        let do_send = async {
+            send.send(Ok(Wayland(
+                GlobalEvent::new(new_object_id(2), 1, interface.clone(), 1).into(),
+            )))
+            .await
+            .expect("Couldn't send GlobalEvent");
+            send.close_channel();
+        };
+
+        let sut = Arc::new(display);
+        let dispatch = sut.clone();
+        let mut changes = sut.registry_changes();
+        let (_, change, result) = tokio::join!(do_send, changes.next(), dispatch.dispatch());
+        result.expect("Dispatch returned an error");
+
+        assert_matches!(change, Some(RegistryChange::Add(item)) => item.interface == interface);
+    }
+
+    #[tokio::test]
+    async fn display_impl_registry_changes_streames_remove() {
+        use protocols::{
+            wayland::wl_registry::{GlobalEvent, GlobalRemoveEvent},
+            Events::Wayland,
+        };
+        let (display, mut send) = new_dispatch_display_impl().await;
+        let interface = CString::new("wl_compositor").expect("Can't create interface name");
+        let global_name = 2;
+        let do_send = async {
+            send.send(Ok(Wayland(
+                GlobalEvent::new(new_object_id(2), global_name, interface.clone(), 1).into(),
+            )))
+            .await
+            .expect("Couldn't send GlobalEvent");
+            send.send(Ok(Wayland(
+                GlobalRemoveEvent::new(new_object_id(2), global_name).into(),
+            )))
+            .await
+            .expect("Couldn't send GlobalRemoveEvent");
+            send.close_channel();
+        };
+
+        let sut = Arc::new(display);
+        let dispatch = sut.clone();
+        let mut changes = sut.registry_changes().skip(1);
+        let (_, change, result) = tokio::join!(do_send, changes.next(), dispatch.dispatch());
+        result.expect("Dispatch returned an error");
+
+        assert_matches!(change, Some(RegistryChange::Remove(GlobalName(name))) => assert_eq!(name , global_name));
     }
 }
