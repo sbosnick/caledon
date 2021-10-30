@@ -25,7 +25,7 @@
 use std::{
     collections::HashMap,
     convert::TryInto,
-    ffi::CString,
+    ffi::{CStr, CString},
     iter::FromIterator,
     ops::Index,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -45,6 +45,7 @@ pub(crate) struct Global {
 }
 
 pub(crate) type GlobalKv = (u32, Global);
+pub(crate) type GlobalKvRef<'a> = (&'a u32, &'a Global);
 
 /// A change indicator for the [`Registry`] from which the change notification arises.
 #[derive(Debug, Clone, PartialEq)]
@@ -101,10 +102,9 @@ impl Registry {
 
     /// Return a [`Stream`] of [`GlobalChange`] notifications.
     ///
-    /// The supplied [`CancellationToken`] will be cancel if the caller can't keep up with the
-    /// generated steam of change notifications. This is a somewhat brutal form of back pressure.
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
+    /// The supplied [`CancellationToken`] will be cancelled if the caller
+    /// can't keep up with the generated steam of change notifications. This
+    /// is a somewhat brutal form of back pressure.
     pub fn changes(&self, cancel: CancellationToken) -> impl Stream<Item = GlobalChange> {
         let mut state = self.shared.state.write().unwrap();
 
@@ -118,16 +118,12 @@ impl Registry {
         reciever
     }
 
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn lock_mut(&self) -> RegistryLockMut {
         RegistryLockMut {
             lock: self.shared.state.write().unwrap(),
         }
     }
 
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn lock_ref(&self) -> RegistryLockRef {
         RegistryLockRef {
             lock: self.shared.state.read().unwrap(),
@@ -190,8 +186,6 @@ impl Default for State {
 }
 
 impl<'a> RegistryLockMut<'a> {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn add(&mut self, key: u32, value: Global) {
         self.lock.map.insert(key, value.clone());
         self.publish(GlobalChange::Add(key, value));
@@ -206,8 +200,6 @@ impl<'a> RegistryLockMut<'a> {
         key
     }
 
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn remove(&mut self, key: u32) {
         self.lock.map.remove(&key);
         self.publish(GlobalChange::Remove(key));
@@ -238,11 +230,23 @@ impl<'a> Index<&u32> for RegistryLockRef<'a> {
     }
 }
 
+impl<'a> RegistryLockRef<'a> {
+    pub fn iter(&self) -> impl Iterator<Item = GlobalKvRef> {
+        self.lock.map.iter()
+    }
+}
+
 impl Global {
-    // TODO: remove this when it is no longer needed
-    #[allow(dead_code)]
     pub fn new(interface: CString, version: u32) -> Self {
         Self { interface, version }
+    }
+
+    pub(crate) fn interface(&self) -> &CStr {
+        &self.interface
+    }
+
+    pub(crate) fn version(&self) -> u32 {
+        self.version
     }
 }
 
@@ -261,6 +265,25 @@ mod tests {
         let result = sut.lock_ref()[&key].clone();
 
         assert_eq!(result, global);
+    }
+
+    #[test]
+    fn registry_iter_includes_added_global() {
+        let interface = CString::new("wl_compositor").expect("bad CString");
+        let global = Global::new(interface, 1);
+
+        let sut = Registry::new();
+        let key = sut.lock_mut().add_new(global.clone());
+        let results: Vec<_> = sut
+            .lock_ref()
+            .iter()
+            .map(|(name, global)| (*name, global.clone()))
+            .collect();
+
+        assert!(
+            results.contains(&(key, global)),
+            "Expected global not in the iteration."
+        );
     }
 
     #[test]

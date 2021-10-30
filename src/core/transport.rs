@@ -94,6 +94,7 @@ use super::{
 /// [`AsyncRead`]: tokio::io::AsyncRead
 /// [`AsyncWrite`]: tokio::io::AsyncWrite
 #[pin_project]
+#[derive(Debug)]
 pub struct WaylandTransport<T, R, P, M> {
     #[pin]
     inner: Framed<T, WaylandCodec<R, P>>,
