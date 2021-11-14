@@ -23,7 +23,7 @@ mod store;
 mod transport;
 mod wire;
 
-pub(crate) use role::ClientRole;
+pub(crate) use role::{ClientRole, ServerRole};
 pub(crate) use wire::{make_wire_protocol, WaylandState, WireError, WireRecv, WireSend, WireState};
 
 /// An argument type for a [Wayland] message.

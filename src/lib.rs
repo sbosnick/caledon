@@ -21,6 +21,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 pub mod client;
 pub mod core;
+pub mod server;
 
 mod registry;
 
