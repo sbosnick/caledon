@@ -45,6 +45,8 @@ pub struct Server<CS, C> {
 /// The server-side object that represents one connection from a client.
 #[derive(Debug)]
 pub struct Display<C> {
+    // TODO: remove this when it is no longer needed
+    #[allow(dead_code)]
     inner: DisplayImpl<WireProtocol<C>>,
 }
 
